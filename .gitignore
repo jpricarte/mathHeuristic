@@ -1,0 +1,7 @@
+# Directories
+.ipynb_checkpoints
+.vscode
+
+# Files
+backup*
+*.log

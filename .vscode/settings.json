@@ -7,6 +7,13 @@
         "vector": "cpp",
         "functional": "cpp",
         "*.tcc": "cpp",
-        "stdexcept": "cpp"
-    }
+        "stdexcept": "cpp",
+        "fstream": "cpp",
+        "unordered_set": "cpp",
+        "array": "cpp",
+        "string_view": "cpp",
+        "initializer_list": "cpp",
+        "utility": "cpp"
+    },
+    "C_Cpp.errorSquiggles": "Enabled"
 }

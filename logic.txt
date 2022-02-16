@@ -1,5 +1,0 @@
-Gerar solução inicial: usa um algoritmo de MST, como Prim
-Clusterização: buscar um algoritmo eficiente e exato, até agora não tenho nada
-Subproblema: Usar gurobi para resolver um modelo, provavelmente Rothlauf
-
-Calculando Subproblema:
