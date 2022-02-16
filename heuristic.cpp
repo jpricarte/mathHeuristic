@@ -2,17 +2,13 @@
 #include <fstream>
 #include <cmath>
 #include <vector>
-#include <unordered_set>
 #include <random>
 #include <gurobi_c++.h>
 #include <lemon/list_graph.h>
 #include <lemon/kruskal.h>
 #include <lemon/dijkstra.h>
-#include <lemon/dfs.h>
 #include <lemon/adaptors.h>
 
-#define C 2
-#define MAX_ITER 10
 
 using namespace std;
 using namespace lemon;
@@ -24,16 +20,12 @@ typedef lemon::ListGraph::Edge Edge;
 typedef lemon::ListGraph::EdgeMap<double> EdgeMapDouble;
 typedef lemon::ListGraph::EdgeMap<bool>   EdgeMapBool;
 typedef lemon::FilterEdges<Graph,EdgeMapBool> Tree;
-typedef lemon::FilterEdges<Graph,EdgeMapBool>::NodeMap<double> TreeNodeMapDouble;
-typedef lemon::FilterEdges<Graph,EdgeMapBool>::NodeMap<int>    TreeNodeMapInt;
 typedef lemon::FilterEdges<Graph,EdgeMapBool>::NodeMap<bool>    TreeNodeMapBool;
 typedef lemon::FilterEdges<Graph, vector<Node>> Subproblem;
-typedef lemon::FilterEdges<Graph,EdgeMapBool>::NodeMap<vector<Node>> TreeNodeMapSons;
 
 // Defining Graph elements
 Graph graph;
 int n, m; // Number of nodes and edges, respectively
-int root_index;
 long unsigned int k;
 Node root;
 vector<Node> nodes;
@@ -41,17 +33,15 @@ vector<Edge> edges;
 EdgeMapDouble lengths(graph);
 vector<vector<double>> requirements = {};
 
-
 // Defining Solution elements
 EdgeMapBool edges_tree(graph);
 Tree tree(graph, edges_tree);
-TreeNodeMapDouble tree_distances(tree);
 TreeNodeMapBool in_some_cluster(tree, false);
 vector<vector<Node>> clusters;
 vector<Node>* current_cluster = nullptr;
+
 // Solver Elements
 GRBEnv env(true);
-
 
 void readInstance(char filename[])
 {
@@ -238,7 +228,7 @@ int main(int argc, char* argv[])
 
     // Inicialization
     // Read instance
-    root_index = stoi(argv[2]);
+    int root_index = stoi(argv[2]);
     k = stoi(argv[3]);
     readInstance(argv[1]);
     root = nodes[root_index];
