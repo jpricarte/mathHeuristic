@@ -97,6 +97,17 @@ void readInstance(char filename[])
     instanceFile.close();
 }
 
+void printEdgesTree()
+{
+    for (auto edge : edges)
+    {
+        if (edges_tree[edge])
+        {
+            cout << graph.id(graph.u(edge)) << " " << graph.id(graph.v(edge)) << endl;
+        }
+    }
+}
+
 double generateInitialSolution()
 {
     return kruskal(graph, lengths, edges_tree);
@@ -110,8 +121,10 @@ double calculateObjective()
         Dijkstra<Tree, EdgeMapDouble> dij(tree, lengths);
         dij.init();
         dij.addSource(u);
+        int counter = 0;
         while (!dij.emptyQueue())
         {
+            counter++;
             Node v = dij.processNextNode();
             double distance = dij.dist(v);
             double requirement = requirements[tree.id(u)][tree.id(v)];
@@ -415,7 +428,7 @@ void solveSubproblem(vector<Node> subproblem_nodes)
         int status = model.get(GRB_IntAttr_Status);
         if( status == GRB_OPTIMAL)
         {
-            cout << "Found" << endl;
+            cout << "Success" << endl;
             for (auto pair : pair_keys)
             {
                 auto x = x_map[pair];
@@ -426,8 +439,10 @@ void solveSubproblem(vector<Node> subproblem_nodes)
                     edges_tree[e] = x_value;
                 }
             }
+            tree = Tree(graph, edges_tree);
+        } else {
+            cout << "fail" << endl;
         }
-        
 
     } 
     catch(GRBException e) {
@@ -466,8 +481,9 @@ vector<Node> selectTwoClusters()
         }
     }
     return final_cluster;
-
 }
+
+
 
 int main(int argc, char* argv[])
 {
@@ -477,7 +493,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    srand(0xc0ffee);
+    srand(0xf0da5e);
     env.set("LogFile", "heuristic_solver.log");
     env.set("OutputFlag", "0");
     env.start();
@@ -490,7 +506,7 @@ int main(int argc, char* argv[])
     cout << "instance read" << endl;
     generateInitialSolution();
     cout << "initial solution generated" << endl;
-    // printTree(root, INVALID);
+    tree = Tree(graph, edges_tree);
     divideTree(root, INVALID);
     cout << "clusterized" << endl;
     cout << "clusters created: " << clusters.size() << endl;
@@ -500,8 +516,10 @@ int main(int argc, char* argv[])
     {
         auto some_cluster = selectTwoClusters();
         solveSubproblem(some_cluster);
+        
     }
-    cout << calculateObjective() << endl;
+    // cout << calculateObjective() << endl;
+    printTree(root, INVALID);
     
 	return 0;
 }
