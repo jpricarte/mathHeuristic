@@ -57,7 +57,7 @@ void readInstance(char filename[])
     uint16_t u, v;
     double value;
 
-    // Getting graph size (n for nodes and m for edges) and resizing everything
+    // Get graph size (n for nodes and m for edges) and resizing everything
     instanceFile >> e1 >> e2;
     n = stoi(e1);
     m = stoi(e2);
@@ -237,7 +237,7 @@ void solveSubproblem(vector<Node> subproblem_nodes)
                 Edge e = findEdge(graph, u, v);
                 if (e != INVALID)
                 {
-                    edges_tree[e] = false;
+                    // edges_tree[e] = false;
                     int u_id = graph.id(u);
                     int v_id = graph.id(v);
                     // x_{o,u} (x for every edge (o,u) in subgraph)
@@ -246,6 +246,7 @@ void solveSubproblem(vector<Node> subproblem_nodes)
                     stringstream s;
                     s << "x(" << u_id << "," << v_id << ")";
                     auto x = model.addVar(0,1,0,GRB_BINARY, s.str());
+                    x.set(GRB_DoubleAttr_Start,edges_tree[e]);
                     x_map.emplace(node_pair, x);
                 }
             }
@@ -407,27 +408,36 @@ void solveSubproblem(vector<Node> subproblem_nodes)
         // Finally, the objective
         GRBLinExpr objective_expr(0);
         // o is the flow origin
-        for (auto o : subproblem_nodes)
+        // for (auto o : subproblem_nodes)
+        // {
+        //     int o_id = graph.id(o);
+        //     // left side of the arc
+        //     for (auto u : subproblem_nodes)
+        //     {
+        //         int u_id = graph.id(u);
+        //         // right side of the arc
+        //         for (auto v : subproblem_nodes)
+        //         {
+        //             int v_id = graph.id(v);
+        //             // Find if exists edge (u,v) (it means that exists the arcs (u,v) and (v,u))
+        //             Edge e = findEdge(graph, u, v);
+        //             if (e != INVALID)
+        //             {
+        //                 ouv triple(o_id,u_id,v_id);
+        //                 objective_expr += lengths[e] * f_map[triple];
+        //             }
+        //         }
+        //     }
+        // }
+
+        for (auto triple : triple_keys)
         {
-            int o_id = graph.id(o);
-            // left side of the arc
-            for (auto u : subproblem_nodes)
-            {
-                int u_id = graph.id(u);
-                // right side of the arc
-                for (auto v : subproblem_nodes)
-                {
-                    int v_id = graph.id(v);
-                    // Find if exists edge (u,v) (it means that exists the arcs (u,v) and (v,u))
-                    Edge e = findEdge(graph, u, v);
-                    if (e != INVALID)
-                    {
-                        ouv triple(o_id,u_id,v_id);
-                        objective_expr += lengths[e] * f_map[triple];
-                    }
-                }
-            }
+            Node u = graph.nodeFromId(get<1>(triple));
+            Node v = graph.nodeFromId(get<2>(triple));
+            Edge e = findEdge(graph, u, v);
+            objective_expr += lengths[e] * f_map[triple];
         }
+
         model.setObjective(objective_expr, GRB_MINIMIZE);
         model.write("wrong.lp");
         model.optimize();
