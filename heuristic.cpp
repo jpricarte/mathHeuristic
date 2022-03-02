@@ -121,15 +121,19 @@ double calculateObjective()
         Dijkstra<Tree, EdgeMapDouble> dij(tree, lengths);
         dij.init();
         dij.addSource(u);
+        // Avoiding processing the u-u edge
+        dij.processNextNode();
         int counter = 0;
         while (!dij.emptyQueue())
         {
             counter++;
             Node v = dij.processNextNode();
+            // cout << graph.id(u) << " " << graph.id(v) << endl;
             double distance = dij.dist(v);
             double requirement = requirements[tree.id(u)][tree.id(v)];
             cost += distance * requirement;
         }
+        // cout << "esges visited: " << counter << endl;
     }
     return cost/2;
 }
@@ -230,8 +234,10 @@ void solveSubproblem(vector<Node> subproblem_nodes)
             {
                 Node u = subproblem_nodes[i];
                 Node v = subproblem_nodes[j];
-                if (findEdge(graph, u, v) != INVALID)
+                Edge e = findEdge(graph, u, v);
+                if (e != INVALID)
                 {
+                    edges_tree[e] = false;
                     int u_id = graph.id(u);
                     int v_id = graph.id(v);
                     // x_{o,u} (x for every edge (o,u) in subgraph)
@@ -275,7 +281,7 @@ void solveSubproblem(vector<Node> subproblem_nodes)
         {
             cicle_constr_linexp += x_map[x];
         }
-        model.addConstr(cicle_constr_linexp, GRB_EQUAL, (n-1));
+        model.addConstr(cicle_constr_linexp, GRB_EQUAL, (subproblem_nodes.size()-1));
 
 
         // Second constraint
@@ -334,7 +340,7 @@ void solveSubproblem(vector<Node> subproblem_nodes)
                         sum_out += f_map[triple_out];
                     }
                 }
-                model.addConstr(sum_in - sum_out, GRB_EQUAL, (int) requirements[o_id][v_id]);   
+                model.addConstr(sum_in - sum_out, GRB_EQUAL, requirements[o_id][v_id]);   
             }
         }
         
@@ -360,7 +366,7 @@ void solveSubproblem(vector<Node> subproblem_nodes)
             for (auto d : subproblem_nodes)
             {
                 int d_id = graph.id(d);
-                if (o_id != d_id && requirements[o_id][d_id] > 0)
+                if (o_id != d_id && requirements[o_id][d_id] >= 0)
                 {
                     right_sum += requirements[o_id][d_id];
                 }
@@ -374,11 +380,11 @@ void solveSubproblem(vector<Node> subproblem_nodes)
         {
             int o_id = graph.id(o);
 
-            int right_sum = 0;
+            double right_sum = 0;
             for (auto d : subproblem_nodes)
             {
                 int d_id = graph.id(d);
-                if (o_id != d_id && requirements[o_id][d_id] > 0)
+                if (o_id != d_id && requirements[o_id][d_id] >= 0)
                 {
                     right_sum += requirements[o_id][d_id];
                 }
@@ -428,15 +434,16 @@ void solveSubproblem(vector<Node> subproblem_nodes)
         int status = model.get(GRB_IntAttr_Status);
         if( status == GRB_OPTIMAL)
         {
-            cout << "Success" << endl;
+            // cout << "Success" << endl;
             for (auto pair : pair_keys)
             {
                 auto x = x_map[pair];
-                auto x_value = (bool) x.get(GRB_DoubleAttr_X);
+                auto x_value =  x.get(GRB_DoubleAttr_X);
                 auto e = findEdge(graph, graph.nodeFromId(get<0>(pair)), graph.nodeFromId(get<1>(pair)));
+                
                 if (e != INVALID)
                 {
-                    edges_tree[e] = x_value;
+                    edges_tree[e] = (bool) x_value;
                 }
             }
             tree = Tree(graph, edges_tree);
@@ -473,7 +480,10 @@ vector<Node> selectTwoClusters()
                 {
                     for (auto node : clusters[i])
                     {
-                        final_cluster.push_back(node);
+                        if (node != v)
+                        {
+                            final_cluster.push_back(node);
+                        }
                     }
                     return final_cluster;
                 }
@@ -515,11 +525,17 @@ int main(int argc, char* argv[])
     for (int i = 0; i < atoi(argv[3]); i++)
     {
         auto some_cluster = selectTwoClusters();
+        for (auto node : some_cluster)
+        {
+            cout << graph.id(node) << " ";
+        }
+        cout << endl;
         solveSubproblem(some_cluster);
         
     }
-    // cout << calculateObjective() << endl;
-    printTree(root, INVALID);
+    cout << calculateObjective() << endl;
+    // printTree(root, INVALID);
+    printEdgesTree();
     
 	return 0;
 }
