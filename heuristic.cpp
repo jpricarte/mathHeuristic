@@ -86,7 +86,8 @@ void readInstance(char filename[])
     // Adding requirements
     for (auto i=0; i<n; i++)
     {
-        for (auto j=i; j<n; j++)
+        requirements[i][i] = 0;
+        for (auto j=i+1; j<n; j++)
         {
             instanceFile >> e1;
             value = stod(e1);
@@ -246,7 +247,7 @@ void solveSubproblem(vector<Node> subproblem_nodes)
                     stringstream s;
                     s << "x(" << u_id << "," << v_id << ")";
                     auto x = model.addVar(0,1,0,GRB_BINARY, s.str());
-                    x.set(GRB_DoubleAttr_Start,edges_tree[e]);
+                    //x.set(GRB_DoubleAttr_Start,edges_tree[e]);
                     x_map.emplace(node_pair, x);
                 }
             }
@@ -367,7 +368,7 @@ void solveSubproblem(vector<Node> subproblem_nodes)
             for (auto d : subproblem_nodes)
             {
                 int d_id = graph.id(d);
-                if (o_id != d_id && requirements[o_id][d_id] >= 0)
+                if (requirements[o_id][d_id] > 0)
                 {
                     right_sum += requirements[o_id][d_id];
                 }
@@ -377,6 +378,7 @@ void solveSubproblem(vector<Node> subproblem_nodes)
 
         // Fifth constraint
         // flows from each origin can't be greater than the initial flow if the edge is used
+        // otherwise the flow must be zero
         for (auto o : subproblem_nodes)
         {
             int o_id = graph.id(o);
@@ -385,7 +387,7 @@ void solveSubproblem(vector<Node> subproblem_nodes)
             for (auto d : subproblem_nodes)
             {
                 int d_id = graph.id(d);
-                if (o_id != d_id && requirements[o_id][d_id] >= 0)
+                if (requirements[o_id][d_id] > 0)
                 {
                     right_sum += requirements[o_id][d_id];
                 }
@@ -396,6 +398,8 @@ void solveSubproblem(vector<Node> subproblem_nodes)
             {
                 int u_id = get<0>(pair);
                 int v_id = get<1>(pair);
+                // if (o_id == u_id || o_id == v_id)
+                //     continue;
                 ouv l(o_id,u_id,v_id);
                 ouv r(o_id,v_id,u_id);
                 GRBLinExpr left_side(0);
@@ -407,29 +411,6 @@ void solveSubproblem(vector<Node> subproblem_nodes)
 
         // Finally, the objective
         GRBLinExpr objective_expr(0);
-        // o is the flow origin
-        // for (auto o : subproblem_nodes)
-        // {
-        //     int o_id = graph.id(o);
-        //     // left side of the arc
-        //     for (auto u : subproblem_nodes)
-        //     {
-        //         int u_id = graph.id(u);
-        //         // right side of the arc
-        //         for (auto v : subproblem_nodes)
-        //         {
-        //             int v_id = graph.id(v);
-        //             // Find if exists edge (u,v) (it means that exists the arcs (u,v) and (v,u))
-        //             Edge e = findEdge(graph, u, v);
-        //             if (e != INVALID)
-        //             {
-        //                 ouv triple(o_id,u_id,v_id);
-        //                 objective_expr += lengths[e] * f_map[triple];
-        //             }
-        //         }
-        //     }
-        // }
-
         for (auto triple : triple_keys)
         {
             Node u = graph.nodeFromId(get<1>(triple));
@@ -448,16 +429,30 @@ void solveSubproblem(vector<Node> subproblem_nodes)
             for (auto pair : pair_keys)
             {
                 auto x = x_map[pair];
-                auto x_value =  x.get(GRB_DoubleAttr_X);
-                auto e = findEdge(graph, graph.nodeFromId(get<0>(pair)), graph.nodeFromId(get<1>(pair)));
-                
+                auto x_name  = x.get(GRB_StringAttr_VarName);
+                auto x_value = (bool) x.get(GRB_DoubleAttr_X);
+                auto e = findEdge(graph, graph.nodeFromId(get<0>(pair)),graph.nodeFromId(get<1>(pair)));
                 if (e != INVALID)
                 {
-                    edges_tree[e] = (bool) x_value;
+                    // if (edges_tree[e] !=  x_value)
+                    // {
+                    //     cout << graph.id(e) << " -> " << x_value << endl;
+                    // }
+                        if (x_value)
+                            cout << x_name << " - " << x_value << endl;
+                    edges_tree[e] = x_value;
                 }
             }
             tree = Tree(graph, edges_tree);
-        } else {
+            for (auto triple : triple_keys)
+            {
+                auto f_name  = f_map[triple].get(GRB_StringAttr_VarName);
+                auto f_value = f_map[triple].get(GRB_DoubleAttr_X);
+                if (f_value != 0)
+                    cout << f_name << " - " << f_value << endl;
+            }
+        } 
+        else {
             cout << "fail" << endl;
         }
 
@@ -490,7 +485,7 @@ vector<Node> selectTwoClusters()
                 {
                     for (auto node : clusters[i])
                     {
-                        if (node != v)
+                        if (find(final_cluster.begin(), final_cluster.end(), node) == final_cluster.end())
                         {
                             final_cluster.push_back(node);
                         }
@@ -507,6 +502,7 @@ vector<Node> selectTwoClusters()
 
 int main(int argc, char* argv[])
 {
+    bool debug = true;
     if (argc != 4)
     {
         perror("usage: ./heuristic inputFile clusterSize iterNum\n");
@@ -522,6 +518,21 @@ int main(int argc, char* argv[])
     // Read instance
     k = stoi(argv[2]);
     readInstance(argv[1]);
+
+    
+    for (auto linha : requirements)
+    {
+        // for (auto elem : linha)
+        // {
+        //     cout << elem << "\t";
+        // }
+        cout << linha.size();
+        cout << endl;
+    }
+
+    cout << "32, 2 - " << requirements[32][2] << endl;
+    cout << "6, 5 - " << requirements[6][5] << endl;
+
     root = nodes[rand()%n];
     cout << "instance read" << endl;
     generateInitialSolution();
@@ -535,11 +546,14 @@ int main(int argc, char* argv[])
     for (int i = 0; i < atoi(argv[3]); i++)
     {
         auto some_cluster = selectTwoClusters();
-        for (auto node : some_cluster)
+        if (debug)
         {
-            cout << graph.id(node) << " ";
+            for (auto node : some_cluster)
+            {
+                cout << graph.id(node) << " ";
+            }
+            cout << endl;
         }
-        cout << endl;
         solveSubproblem(some_cluster);
         
     }
