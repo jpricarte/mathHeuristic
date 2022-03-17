@@ -215,9 +215,73 @@ void printTree(Node n, Node up)
     }
 }
 
+
+void addRequirements(int base_index, Node current, Node previous, vector<Node> subproblem_nodes, vector<vector<double>> *subproblem_requirements)
+{
+    auto current_id = graph.id(current);
+
+    for (auto i=0; i<subproblem_nodes.size(); i++)
+    {
+        auto node_id = graph.id(subproblem_nodes[i]);
+        (*subproblem_requirements)[base_index][i] += requirements[node_id][current_id];
+        (*subproblem_requirements)[i][base_index] += requirements[node_id][current_id];
+    }
+
+    for (auto e = Tree::IncEdgeIt(tree,current); e != INVALID; ++e)
+    {
+        auto node = tree.oppositeNode(current, e);
+        if (node == previous)
+        {
+            continue;
+        }
+        addRequirements(base_index, node, current, subproblem_nodes, subproblem_requirements);
+    }
+}
+
 // TODO: Minimizar o número de laços, por enquanto é só pra garantir que funciona
 void solveSubproblem(vector<Node> subproblem_nodes)
 {
+    // Cria nova tabela de requisitos copiando os valores originais
+    vector<vector<double>> subproblem_requirements = {};
+    for (auto i=0; i<subproblem_nodes.size(); i++)
+    {
+        subproblem_requirements.push_back(vector<double>());
+        for (auto j=0; j<subproblem_nodes.size(); j++)
+        {
+            auto u_id = graph.id(subproblem_nodes[i]);
+            auto v_id = graph.id(subproblem_nodes[j]);
+            subproblem_requirements[i].push_back(requirements[u_id][v_id]);
+        }
+    }
+    // Após isso, soma os requisitos amarrados externamente ao vértice
+    for (auto i=0; i<subproblem_nodes.size(); i++)
+    {
+        
+        auto u = subproblem_nodes[i];
+        // itera sobre as arestas, 
+        for (auto e = Tree::IncEdgeIt(tree,u); e != INVALID; ++e)
+        {
+            auto v = tree.oppositeNode(u, e);
+            // se o vertice oposto não estiver no subproblema,
+            // vai somando todos os requisitos dos outros pra esse
+            if (find(subproblem_nodes.begin(), subproblem_nodes.end(), v) == subproblem_nodes.end())
+            {
+                addRequirements(i, v, u, subproblem_nodes, &subproblem_requirements);
+            }
+        }
+    }
+
+    for (auto i=0; i<subproblem_nodes.size(); i++)
+    {
+        subproblem_requirements[i][i]=0;
+        for (auto j=0; j<subproblem_nodes.size(); j++)
+        {
+            cout << subproblem_requirements[i][j] << "\t";
+        }
+        cout << endl;
+    }
+    cout << endl;
+    cout << "Im going" << endl;
     try 
     {
         GRBModel model = GRBModel(env);
@@ -309,11 +373,13 @@ void solveSubproblem(vector<Node> subproblem_nodes)
         // Third constraint
         // Flow conservation
         // for all o, for all v execpt o
-        for (auto o : subproblem_nodes)
+        for (int i=0; i<subproblem_nodes.size(); i++)
         {
+            auto o = subproblem_nodes[i];
             int o_id = graph.id(o);
-            for (auto v : subproblem_nodes)
+            for (int j=0; j<subproblem_nodes.size(); j++)
             {
+                Node v = subproblem_nodes[j];
                 // v cannot be equal to o
                 if (v == o)
                 {
@@ -342,14 +408,15 @@ void solveSubproblem(vector<Node> subproblem_nodes)
                         sum_out += f_map[triple_out];
                     }
                 }
-                model.addConstr(sum_in - sum_out, GRB_EQUAL, requirements[o_id][v_id]);   
+                model.addConstr(sum_in - sum_out, GRB_EQUAL, subproblem_requirements[i][j]);   
             }
         }
         
         // Fourth constraint
         // The origin sends the sum of all its requirements as initial flow
-        for (auto o : subproblem_nodes)
+        for (int i=0; i<subproblem_nodes.size(); i++)
         {
+            auto o = subproblem_nodes[i];
             int o_id = graph.id(o);
 
             GRBLinExpr left_sum(0);
@@ -365,12 +432,14 @@ void solveSubproblem(vector<Node> subproblem_nodes)
             }
 
             double right_sum=0;
-            for (auto d : subproblem_nodes)
+            for (int j=0; j<subproblem_nodes.size(); j++)
             {
+                Node d = subproblem_nodes[j];
                 int d_id = graph.id(d);
-                if (requirements[o_id][d_id] > 0)
+                if (subproblem_requirements[i][j] > 0)
                 {
-                    right_sum += requirements[o_id][d_id];
+                    right_sum += subproblem_requirements[i][j];
+                    // cout << o_id  << " + " << d_id << " <= " << subproblem_requirements[i][j] << endl;
                 }
             }
             model.addConstr(left_sum, GRB_EQUAL, right_sum);
@@ -379,17 +448,19 @@ void solveSubproblem(vector<Node> subproblem_nodes)
         // Fifth constraint
         // flows from each origin can't be greater than the initial flow if the edge is used
         // otherwise the flow must be zero
-        for (auto o : subproblem_nodes)
+        for (int i=0; i<subproblem_nodes.size(); i++)
         {
+            auto o = subproblem_nodes[i];
             int o_id = graph.id(o);
 
             double right_sum = 0;
-            for (auto d : subproblem_nodes)
+            for (int j=0; j<subproblem_nodes.size(); j++)
             {
+                Node d = subproblem_nodes[j];
                 int d_id = graph.id(d);
-                if (requirements[o_id][d_id] > 0)
+                if (subproblem_requirements[i][j] > 0)
                 {
-                    right_sum += requirements[o_id][d_id];
+                    right_sum += subproblem_requirements[i][j];
                 }
             }
 
@@ -425,7 +496,7 @@ void solveSubproblem(vector<Node> subproblem_nodes)
         int status = model.get(GRB_IntAttr_Status);
         if( status == GRB_OPTIMAL)
         {
-            // cout << "Success" << endl;
+            cout << "Success" << endl;
             for (auto pair : pair_keys)
             {
                 auto x = x_map[pair];
@@ -438,20 +509,20 @@ void solveSubproblem(vector<Node> subproblem_nodes)
                     // {
                     //     cout << graph.id(e) << " -> " << x_value << endl;
                     // }
-                        if (x_value)
-                            cout << x_name << " - " << x_value << endl;
+                        // if (x_value)
+                        //     cout << x_name << " - " << x_value << endl;
                     edges_tree[e] = x_value;
                 }
             }
             tree = Tree(graph, edges_tree);
-            for (auto triple : triple_keys)
-            {
-                auto f_name  = f_map[triple].get(GRB_StringAttr_VarName);
-                auto f_value = f_map[triple].get(GRB_DoubleAttr_X);
-                if (f_value != 0)
-                    cout << f_name << " - " << f_value << endl;
-            }
-        } 
+            // for (auto triple : triple_keys)
+            // {
+            //     auto f_name  = f_map[triple].get(GRB_StringAttr_VarName);
+            //     auto f_value = f_map[triple].get(GRB_DoubleAttr_X);
+            //     if (f_value != 0)
+            //         cout << f_name << " - " << f_value << endl;
+            // }
+        }
         else {
             cout << "fail" << endl;
         }
@@ -466,7 +537,7 @@ void solveSubproblem(vector<Node> subproblem_nodes)
 }
 
 
-// TODO: Melhorar essa seleção
+// TODO: Melhorar essa seleção (tá O(mn^4), da pra fazer melhor, mas assim to garantindo que não vai repetir)
 vector<Node> selectTwoClusters()
 {
     random_shuffle(clusters.begin(), clusters.end());
@@ -520,18 +591,18 @@ int main(int argc, char* argv[])
     readInstance(argv[1]);
 
     
-    for (auto linha : requirements)
-    {
-        // for (auto elem : linha)
-        // {
-        //     cout << elem << "\t";
-        // }
-        cout << linha.size();
-        cout << endl;
-    }
+    // for (auto linha : requirements)
+    // {
+    //     // for (auto elem : linha)
+    //     // {
+    //     //     cout << elem << "\t";
+    //     // }
+    //     cout << linha.size();
+    //     cout << endl;
+    // }
 
-    cout << "32, 2 - " << requirements[32][2] << endl;
-    cout << "6, 5 - " << requirements[6][5] << endl;
+    // cout << "32, 2 - " << requirements[32][2] << endl;
+    // cout << "6, 5 - " << requirements[6][5] << endl;
 
     root = nodes[rand()%n];
     cout << "instance read" << endl;
@@ -555,8 +626,10 @@ int main(int argc, char* argv[])
             cout << endl;
         }
         solveSubproblem(some_cluster);
-        
+            printEdgesTree();
+
     }
+    // printTree(root, INVALID);
     cout << calculateObjective() << endl;
     // printTree(root, INVALID);
     printEdgesTree();
