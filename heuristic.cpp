@@ -591,7 +591,7 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
             // }
 
             // deleta clusters
-            printClusters();
+            // printClusters();
             while (!clusters.empty())
             {
                 clusters.pop_back();
@@ -602,7 +602,7 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
             }
             current_cluster = nullptr;
             // reinicia clusters
-            printEdgesTree();
+            // printEdgesTree();
             divideTree(root, INVALID);
         }
         else {
@@ -658,7 +658,7 @@ vector<Node> selectTwoClusters()
 
 int main(int argc, char* argv[])
 {
-    bool debug = false;
+    bool debug = true;
     if (argc != 4)
     {
         perror("usage: ./heuristic inputFile clusterSize iterNum\n");
