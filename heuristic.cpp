@@ -281,6 +281,10 @@ vector<vector<double>> generateSubproblemsReq(const vector<Node>& subproblem_nod
 }
 
 
+/*
+    FORMULAÇÃO MATEMATICA COMEÇA AQUI
+*/
+
 void initVars(GRBModel& model, const vector<Node>& subproblem_nodes, 
               vector<uv>& pair_keys, vector<ouv>& triple_keys,
               map<uv, GRBVar>& x_map, map<ouv, GRBVar>& f_map, map<ouv, GRBVar>& y_map)
@@ -330,7 +334,7 @@ void initVars(GRBModel& model, const vector<Node>& subproblem_nodes,
                     triple_keys.push_back(node_triple);
                     stringstream s;
                     s << "f(" << o_id << "," << u_id << "," << v_id << ")";
-                    auto f = model.addVar(0, GRB_INFINITY, 0, GRB_INTEGER, s.str());
+                    auto f = model.addVar(0, GRB_INFINITY, 0, GRB_CONTINUOUS, s.str());
                     f_map.emplace(node_triple, f);
                     stringstream s2;
                     s2 << "y(" << o_id << "," << u_id << "," << v_id << ")";
@@ -577,6 +581,17 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
     // Após isso, soma os requisitos amarrados externamente ao vértice
     // cout << endl;
     // cout << "Im going" << endl;
+
+    for (auto linha : subproblem_requirements)
+    {
+        for (auto elem : linha)
+        {
+            cout << elem << "\t";
+        }
+        // cout << linha.size();
+        cout << endl;
+    }
+
     try
     {
         GRBModel model {GRBModel(env)};
@@ -740,6 +755,7 @@ int main(int argc, char* argv[])
     divideTree(root, INVALID);
     cout << "clusterized" << endl;
     cout << "clusters created: " << clusters.size() << endl;
+    printEdgesTree();
     // printClusters();
     cout << calculateObjective() << endl;
     for (int i = 0; i < atoi(argv[3]); i++)
