@@ -251,6 +251,7 @@ vector<vector<double>> generateSubproblemsReq(const vector<Node>& subproblem_nod
             auto u_id = graph.id(subproblem_nodes[i]);
             auto v_id = graph.id(subproblem_nodes[j]);
             subproblem_requirements[i].push_back(requirements[u_id][v_id]);
+            
         }
     }
 
@@ -400,7 +401,7 @@ void first_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
 
         // O_u
         double right_sum=0;
-        for (int j=i; j < (int) subproblem_nodes.size(); j++)
+        for (int j=0; j < (int) subproblem_nodes.size(); j++)
         {
             if (subproblem_requirements[i][j] >= 0)
             {
@@ -473,7 +474,7 @@ void third_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
         // Sum of all requirements of o
         double big_m = 0;
         double min = INT32_MAX; // avoid NaN error using int max instead dbl max
-        for (int j=i; j < (int) subproblem_nodes.size(); j++)
+        for (int j=0; j < (int) subproblem_nodes.size(); j++)
         {
             auto r = subproblem_requirements[i][j];
             if (r >= 0)
