@@ -303,7 +303,8 @@ void initVars(GRBModel& model, const vector<Node>& subproblem_nodes,
                 stringstream s;
                 s << "x(" << u_id << "," << v_id << ")";
                 auto x = model.addVar(0,1,0,GRB_BINARY, s.str());
-                x.set(GRB_DoubleAttr_Start,edges_tree[e]);
+                // Uncomment this to use current subt-tree edges configuration
+                // x.set(GRB_DoubleAttr_Start,edges_tree[e]);
                 x_map.emplace(node_pair, x);
             }
         }
