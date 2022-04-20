@@ -287,7 +287,7 @@ void initVars(GRBModel& model, const vector<Node>& subproblem_nodes,
     // Creating vars
     for (int i=0; i < (int) subproblem_nodes.size(); i++)
     {
-        for (int j=i; j < (int) subproblem_nodes.size(); j++)
+        for (int j=i+1; j < (int) subproblem_nodes.size(); j++)
         {
             auto u = subproblem_nodes[i];
             auto v = subproblem_nodes[j];
@@ -320,6 +320,7 @@ void initVars(GRBModel& model, const vector<Node>& subproblem_nodes,
                 int o_id = graph.id(o);
                 int u_id = graph.id(u);
                 int v_id = graph.id(v);
+                // By definition, we cannot have a (u,u) edge, so we don't need to test it
                 if (findEdge(graph, u, v) != INVALID)
                 {
                     // f^o_{u,v} for every arc in graph (u,v) != (v,u)
@@ -339,7 +340,39 @@ void initVars(GRBModel& model, const vector<Node>& subproblem_nodes,
     }
 }
 
-void first_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, vector<vector<double>>& subproblem_requirements,
+void objective(GRBModel& model, const vector<Node>& subproblem_nodes, map<ouv, GRBVar>& f_map)
+{
+    GRBLinExpr objective_expr(0);
+    for (int i=0; i < (int) subproblem_nodes.size(); i++)
+    {
+        auto u = subproblem_nodes[i];
+        auto u_id = graph.id(u);
+        for (int j=i+1; j < (int) subproblem_nodes.size(); j++)
+        {
+            auto v = subproblem_nodes[j];
+            auto v_id = graph.id(v);
+            auto e = findEdge(graph, u, v);
+            if (e != INVALID)
+            {
+                // c_{u,v}
+                auto length = lengths[e];
+                GRBLinExpr inner_sum(0);
+                for (auto o : subproblem_nodes)
+                {
+                    auto o_id = graph.id(o);
+                    ouv triple_in(o_id,u_id,v_id);
+                    ouv triple_out(o_id,v_id,u_id);
+                    inner_sum += (f_map[triple_in] + f_map[triple_out]);
+                }
+                objective_expr += length * inner_sum;
+            }
+        }
+    }
+    model.setObjective(objective_expr, GRB_MINIMIZE);
+}
+
+void first_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, 
+                      vector<vector<double>>& subproblem_requirements,
                       map<ouv, GRBVar>& f_map)
 {
     for (int i=0; i < (int) subproblem_nodes.size(); i++)
@@ -348,18 +381,21 @@ void first_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, vec
         int o_id = graph.id(o);
 
         GRBLinExpr left_sum(0);
-        for (int j=i+1; j < (int) subproblem_nodes.size(); j++)
+        for (int j=0; j < (int) subproblem_nodes.size(); j++)
         {
-            auto w = subproblem_nodes[j];
-            int w_id = graph.id(w);
-            auto e = findEdge(graph, o, w);
+            if (i==j) continue;
+
+            auto u = subproblem_nodes[j];
+            int u_id = graph.id(u);
+            auto e = findEdge(graph, o, u);
             if (e != INVALID)
             {
-                ouv triple(o_id,o_id,w_id);
+                ouv triple(o_id,o_id,u_id);
                 left_sum += f_map[triple];
             }
         }
 
+        // O_u
         double right_sum=0;
         for (int j=i+1; j < (int) subproblem_nodes.size(); j++)
         {
@@ -389,8 +425,9 @@ void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, ve
             auto u_id = graph.id(u);
 
             GRBLinExpr sum_out(0);
-            for (int j=i+1; j < (int) subproblem_nodes.size(); j++)
+            for (int j=0; j < (int) subproblem_nodes.size(); j++)
             {
+                if (j==k || j==i) continue;
                 auto v = subproblem_nodes[j];
                 if (findEdge(graph,u,v) != INVALID)
                 {
@@ -401,8 +438,9 @@ void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, ve
             }
 
             GRBLinExpr sum_in(0);
-            for (int j=i+1; j < (int) subproblem_nodes.size(); j++)
+            for (int j=0; j < (int) subproblem_nodes.size(); j++)
             {
+                if (j==k || j==i) continue;
                 auto v = subproblem_nodes[j];
                 auto v_id = graph.id(v);
                 if (findEdge(graph,v,u) != INVALID)
@@ -441,14 +479,14 @@ void third_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
                 }
                 big_m += r;
             }
-            big_m -= min;
         }
+        big_m -= min;
 
         for (int j=0; j < (int) subproblem_nodes.size(); j++)
         {
             auto u = subproblem_nodes[j];
             auto u_id = graph.id(u);
-            for (int k=j+1; k < (int) subproblem_nodes.size(); k++)
+            for (int k=0; k < (int) subproblem_nodes.size(); k++)
             {
                 auto v = subproblem_nodes[k];
                 auto e = findEdge(graph, u, v);
@@ -523,35 +561,6 @@ void sixth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
     model.addConstr(cicle_constr_linexp, GRB_EQUAL, (subproblem_nodes.size()-1));
 }
 
-void objective(GRBModel& model, const vector<Node>& subproblem_nodes,
-               vector<ouv>& triple_keys, map<ouv, GRBVar>& f_map)
-{
-    GRBLinExpr objective_expr(0);
-    for (int i=0; i < (int) subproblem_nodes.size(); i++)
-    {
-        auto u = subproblem_nodes[i];
-        auto u_id = graph.id(u);
-        for (int j=i; j < (int) subproblem_nodes.size(); j++)
-        {
-            auto v = subproblem_nodes[j];
-            auto v_id = graph.id(v);
-            auto e = findEdge(graph, u, v);
-            if (e != INVALID)
-            {
-                auto length = lengths[e];
-                for (auto o : subproblem_nodes)
-                {
-                    auto o_id = graph.id(o);
-                    ouv triple_in(o_id,u_id,v_id);
-                    ouv triple_out(o_id,v_id,u_id);
-                    objective_expr += length * (f_map[triple_in] + f_map[triple_out]);
-                }
-            }
-        }
-    }
-    model.setObjective(objective_expr, GRB_MINIMIZE);
-}
-
 // TODO: Minimizar o número de laços, por enquanto é só pra garantir que funciona
 void solveSubproblem(const vector<Node> subproblem_nodes)
 {
@@ -596,7 +605,7 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
         sixth_constraint(model, subproblem_nodes, pair_keys, x_map);
 
         // Finally, the objective
-        objective(model, subproblem_nodes, triple_keys, f_map);
+        objective(model, subproblem_nodes, f_map);
         
         model.write("wrong.lp");
         model.optimize();
