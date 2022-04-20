@@ -371,6 +371,8 @@ void objective(GRBModel& model, const vector<Node>& subproblem_nodes, map<ouv, G
     model.setObjective(objective_expr, GRB_MINIMIZE);
 }
 
+
+// Origin sends the sum of all its requirements as initial flow
 void first_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, 
                       vector<vector<double>>& subproblem_requirements,
                       map<ouv, GRBVar>& f_map)
@@ -432,8 +434,8 @@ void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, ve
                 if (findEdge(graph,u,v) != INVALID)
                 {
                     int v_id = graph.id(v);
-                    ouv triple_in(o_id,u_id,v_id);
-                    sum_out += f_map[triple_in];
+                    ouv triple_out(o_id,u_id,v_id);
+                    sum_out += f_map[triple_out];
                 }
             }
 
@@ -445,11 +447,11 @@ void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, ve
                 auto v_id = graph.id(v);
                 if (findEdge(graph,v,u) != INVALID)
                 {
-                    ouv triple_out(o_id,v_id,u_id);
-                    sum_in += f_map[triple_out];
+                    ouv triple_in(o_id,v_id,u_id);
+                    sum_in += f_map[triple_in];
                 }
             }
-            model.addConstr(sum_out - sum_in, GRB_EQUAL, -subproblem_requirements[k][i]);
+            model.addConstr(sum_out - sum_in, GRB_EQUAL, subproblem_requirements[k][i]);
         }
     }
 }
@@ -486,15 +488,17 @@ void third_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
         {
             auto u = subproblem_nodes[j];
             auto u_id = graph.id(u);
-            for (int k=0; k < (int) subproblem_nodes.size(); k++)
+            for (int k=j+1; k < (int) subproblem_nodes.size(); k++)
             {
                 auto v = subproblem_nodes[k];
                 auto e = findEdge(graph, u, v);
                 if (e != INVALID)
                 {
                     auto v_id = graph.id(v);
-                    ouv triple(o_id,u_id,v_id);
-                    model.addConstr(f_map[triple], GRB_LESS_EQUAL, big_m*y_map[triple]);
+                    ouv triple_in(o_id,v_id,u_id);
+                    ouv triple_out(o_id,u_id,v_id);
+                    model.addConstr(f_map[triple_in], GRB_LESS_EQUAL, big_m*y_map[triple_in]);
+                    model.addConstr(f_map[triple_out], GRB_LESS_EQUAL, big_m*y_map[triple_out]);
                 }
             }
         }
