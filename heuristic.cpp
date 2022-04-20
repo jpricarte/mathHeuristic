@@ -375,7 +375,7 @@ void objective(GRBModel& model, const vector<Node>& subproblem_nodes, map<ouv, G
 
 // Origin sends the sum of all its requirements as initial flow
 void first_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, 
-                      vector<vector<double>>& subproblem_requirements,
+                      const vector<vector<double>>& subproblem_requirements,
                       map<ouv, GRBVar>& f_map)
 {
     for (int i=0; i < (int) subproblem_nodes.size(); i++)
@@ -412,7 +412,9 @@ void first_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
 }
 
 
-void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, vector<vector<double>>& subproblem_requirements, 
+// Flow conservation
+void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, 
+                       const vector<vector<double>>& subproblem_requirements, 
                        map<ouv, GRBVar>& f_map)
 {
     // For every vertex
