@@ -582,6 +582,9 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
 
         initVars(model, subproblem_nodes, pair_keys, triple_keys, x_map, f_map, y_map);
 
+        // First of all, the objective
+        objective(model, subproblem_nodes, f_map);
+
         // First constraint
         // The origin sends the sum of all its requirements as initial flow
         first_constraint(model, subproblem_nodes, subproblem_requirements, f_map);
@@ -603,9 +606,6 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
 
         //Avoid cicle constraint
         sixth_constraint(model, subproblem_nodes, pair_keys, x_map);
-
-        // Finally, the objective
-        objective(model, subproblem_nodes, f_map);
         
         model.write("wrong.lp");
         model.optimize();
