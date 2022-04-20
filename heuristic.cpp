@@ -287,7 +287,7 @@ void initVars(GRBModel& model, const vector<Node>& subproblem_nodes,
     // Creating vars
     for (int i=0; i < (int) subproblem_nodes.size(); i++)
     {
-        for (int j=i+1; j < (int) subproblem_nodes.size(); j++)
+        for (int j=i; j < (int) subproblem_nodes.size(); j++)
         {
             auto u = subproblem_nodes[i];
             auto v = subproblem_nodes[j];
@@ -348,7 +348,7 @@ void objective(GRBModel& model, const vector<Node>& subproblem_nodes, map<ouv, G
     {
         auto u = subproblem_nodes[i];
         auto u_id = graph.id(u);
-        for (int j=i+1; j < (int) subproblem_nodes.size(); j++)
+        for (int j=i; j < (int) subproblem_nodes.size(); j++)
         {
             auto v = subproblem_nodes[j];
             auto v_id = graph.id(v);
@@ -400,9 +400,9 @@ void first_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
 
         // O_u
         double right_sum=0;
-        for (int j=i+1; j < (int) subproblem_nodes.size(); j++)
+        for (int j=i; j < (int) subproblem_nodes.size(); j++)
         {
-            if (subproblem_requirements[i][j] > 0)
+            if (subproblem_requirements[i][j] >= 0)
             {
                 right_sum += subproblem_requirements[i][j];
             }
@@ -473,10 +473,10 @@ void third_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
         // Sum of all requirements of o
         double big_m = 0;
         double min = INT32_MAX; // avoid NaN error using int max instead dbl max
-        for (int j=i+1; j < (int) subproblem_nodes.size(); j++)
+        for (int j=i; j < (int) subproblem_nodes.size(); j++)
         {
             auto r = subproblem_requirements[i][j];
-            if (r > 0)
+            if (r >= 0)
             {
                 if (r < min)
                 {
@@ -491,7 +491,7 @@ void third_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
         {
             auto u = subproblem_nodes[j];
             auto u_id = graph.id(u);
-            for (int k=j+1; k < (int) subproblem_nodes.size(); k++)
+            for (int k=j; k < (int) subproblem_nodes.size(); k++)
             {
                 auto v = subproblem_nodes[k];
                 auto e = findEdge(graph, u, v);
@@ -519,7 +519,7 @@ void fourth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, ma
         {
             auto u = subproblem_nodes[i];
             auto u_id = graph.id(u);
-            for (int j=i+1; j < (int) subproblem_nodes.size(); j++)
+            for (int j=i; j < (int) subproblem_nodes.size(); j++)
             {
                 auto v = subproblem_nodes[j];   
                 auto v_id = graph.id(v);
@@ -583,6 +583,7 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
         vector<uv> pair_keys {};
         map<uv, GRBVar> x_map;
 
+        // f_{o,u,v} means: the flow of o going from u to v
         vector<ouv> triple_keys {};
         map<ouv, GRBVar> f_map;
         map<ouv, GRBVar> y_map;
