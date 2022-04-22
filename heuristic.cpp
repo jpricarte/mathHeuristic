@@ -525,6 +525,7 @@ void third_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
 }
 
 // Tree constraint for y
+// Each origin o must have exact n-1 y_{o,u,v} activated
 void fourth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, map<ouv, GRBVar>& y_map)
 {
     for (auto o : subproblem_nodes)
@@ -535,9 +536,10 @@ void fourth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, ma
         {
             auto u = subproblem_nodes[i];
             auto u_id = graph.id(u);
-            for (int j=i; j < (int) subproblem_nodes.size(); j++)
+            for (int j=0; j < (int) subproblem_nodes.size(); j++)
             {
                 auto v = subproblem_nodes[j];   
+                if (v==u) continue;
                 auto v_id = graph.id(v);
                 auto e = findEdge(graph, u, v);
                 if (e != INVALID)
@@ -551,6 +553,7 @@ void fourth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, ma
     }
 }
 
+// Associate x_{u,v} to y_{o,u,v} or y_{o,v,u}
 void fifth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, vector<uv> pair_keys,
                       map<uv, GRBVar>& x_map ,map<ouv, GRBVar>& y_map)
 {
