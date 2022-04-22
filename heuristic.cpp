@@ -379,6 +379,7 @@ void objective(GRBModel& model, const vector<Node>& subproblem_nodes, map<ouv, G
 
 
 // Origin sends the sum of all its requirements as initial flow
+// OK
 void first_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, 
                       const vector<vector<double>>& subproblem_requirements,
                       map<ouv, GRBVar>& f_map)
@@ -403,7 +404,7 @@ void first_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
             }
         }
 
-        // O_u
+        // O_o
         double right_sum=0;
         for (int j=0; j < (int) subproblem_nodes.size(); j++)
         {
@@ -424,21 +425,23 @@ void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
 {
     // For every vertex
     // TODO: mudar o nome dos indices, que só no final percebi que precisava do indice da origem
-    for (int k=0; k < (int) subproblem_nodes.size(); k++)
+    for (int i=0; i < (int) subproblem_nodes.size(); i++)
     {
-        auto o = subproblem_nodes[k];
+        auto o = subproblem_nodes[i];
         auto o_id = graph.id(o);
         // for every arc going from u
-        for (int i=0; i < (int) subproblem_nodes.size(); i++)
+        for (int j=0; j < (int) subproblem_nodes.size(); j++)
         {
-            auto u = subproblem_nodes[i];
+            auto u = subproblem_nodes[j];
             auto u_id = graph.id(u);
 
-            GRBLinExpr sum_out(0);
-            for (int j=0; j < (int) subproblem_nodes.size(); j++)
+            GRBLinExpr sum_out(0); // Flow of o going out of u (f_{o,u,v})
+            for (int k=0; k < (int) subproblem_nodes.size(); k++)
             {
-                if (j==k || j==i) continue;
-                auto v = subproblem_nodes[j];
+                // Every node v except v=u and v=o
+                if (k==i || k==j) continue;
+                auto v = subproblem_nodes[k];
+                // If the edge (u,v) exists, add f(o,u,v) to constraint
                 if (findEdge(graph,u,v) != INVALID)
                 {
                     int v_id = graph.id(v);
@@ -447,11 +450,12 @@ void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
                 }
             }
 
-            GRBLinExpr sum_in(0);
-            for (int j=0; j < (int) subproblem_nodes.size(); j++)
+            GRBLinExpr sum_in(0); // Flow of o coming to u (f_{o,v,u})
+            for (int k=0; k < (int) subproblem_nodes.size(); k++)
             {
-                if (j==k || j==i) continue;
-                auto v = subproblem_nodes[j];
+                // Every node v except v=u and v=o
+                if (k==i || k==j) continue;
+                auto v = subproblem_nodes[k];
                 auto v_id = graph.id(v);
                 if (findEdge(graph,v,u) != INVALID)
                 {
@@ -459,16 +463,20 @@ void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
                     sum_in += f_map[triple_in];
                 }
             }
-            model.addConstr(sum_out - sum_in, GRB_EQUAL, subproblem_requirements[k][i]);
+            model.addConstr(sum_out - sum_in, GRB_EQUAL, - subproblem_requirements[i][j]);
         }
     }
 }
 
 // f(o,u,v) must b zero if arc is not used
+// Technically, it's the third and fourth constraint,
+// but using a single loop in all nodes set (avoiding u==v), 
+// it's possible to use the same constraint
 void third_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, 
                       vector<vector<double>>& subproblem_requirements, 
                       map<ouv, GRBVar>& f_map, map<ouv, GRBVar>& y_map)
 {
+    // For each origin
     for (int i=0; i < (int) subproblem_nodes.size(); i++)
     {
         auto o = subproblem_nodes[i];
@@ -492,11 +500,14 @@ void third_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
         }
         big_m -= min;
 
+        // For each u
         for (int j=0; j < (int) subproblem_nodes.size(); j++)
         {
             auto u = subproblem_nodes[j];
             auto u_id = graph.id(u);
-            for (int k=j; k < (int) subproblem_nodes.size(); k++)
+            // For each v
+            // k=0 and only one constraint have the same result
+            for (int k=i; k < (int) subproblem_nodes.size(); k++)
             {
                 auto v = subproblem_nodes[k];
                 auto e = findEdge(graph, u, v);
