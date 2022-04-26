@@ -526,6 +526,7 @@ void third_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
 
 // Tree constraint for y
 // Each origin o must have exact n-1 y_{o,u,v} activated
+// OK
 void fourth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, map<ouv, GRBVar>& y_map)
 {
     for (auto o : subproblem_nodes)
@@ -539,7 +540,7 @@ void fourth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, ma
             for (int j=0; j < (int) subproblem_nodes.size(); j++)
             {
                 auto v = subproblem_nodes[j];   
-                if (v==u) continue;
+                if (v==u || v == o) continue;
                 auto v_id = graph.id(v);
                 auto e = findEdge(graph, u, v);
                 if (e != INVALID)
@@ -553,36 +554,37 @@ void fourth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, ma
     }
 }
 
-// Associate x_{u,v} to y_{o,u,v} or y_{o,v,u}
+// Associate x_{u,v} to y_{o,u,v} xor y_{o,v,u}
+// OK
 void fifth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, vector<uv> pair_keys,
                       map<uv, GRBVar>& x_map ,map<ouv, GRBVar>& y_map)
 {
     for (auto o : subproblem_nodes)
     {
         auto o_id = graph.id(o);
-        // For each x_{i,j}
+        // For each x_{i,j}: using pair_keys we mantain the v > u restriction
         for (auto pair : pair_keys)
         {
             int u_id = get<0>(pair);
             int v_id = get<1>(pair);
             ouv l(o_id,u_id,v_id);
             ouv r(o_id,v_id,u_id);
-            GRBLinExpr left_side(0);
-            left_side += y_map[l];
-            left_side += y_map[r];
-            model.addConstr(left_side, GRB_LESS_EQUAL, x_map[pair]);
+            model.addConstr(y_map[l] + y_map[r], GRB_LESS_EQUAL, x_map[pair]);
         }
     }
 }
 
+
+// Avoid cicle constraint
+// Similar to fourth constraint
 void sixth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
                       vector<uv> pair_keys, map<uv, GRBVar>& x_map)
 {
     GRBLinExpr cicle_constr_linexp(0);
     // constraint: sum(x) <= n-1
-    for (auto x : pair_keys)
+    for (auto pair : pair_keys)
     {
-        cicle_constr_linexp += x_map[x];
+        cicle_constr_linexp += x_map[pair];
     }
     model.addConstr(cicle_constr_linexp, GRB_EQUAL, (subproblem_nodes.size()-1));
 }
@@ -623,19 +625,15 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
         // First of all, the objective
         objective(model, subproblem_nodes, f_map);
 
-        // First constraint
         // The origin sends the sum of all its requirements as initial flow
         first_constraint(model, subproblem_nodes, subproblem_requirements, f_map);
 
-        // Second constraint
         // Flow conservation
         second_constraint(model, subproblem_nodes, subproblem_requirements, f_map);
 
-        // Third constraint
         // f(o,u,v) must b zero if arc is not used
         third_constraint(model, subproblem_nodes, subproblem_requirements, f_map, y_map);
 
-        // Fourth constraint
         // Tree constraint for y
         fourth_constraint(model, subproblem_nodes, y_map);
 
