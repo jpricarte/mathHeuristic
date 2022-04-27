@@ -424,7 +424,6 @@ void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
                        map<ouv, GRBVar>& f_map)
 {
     // For every vertex
-    // TODO: mudar o nome dos indices, que só no final percebi que precisava do indice da origem
     for (int i=0; i < (int) subproblem_nodes.size(); i++)
     {
         auto o = subproblem_nodes[i];
