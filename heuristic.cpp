@@ -497,6 +497,7 @@ void third_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
                 big_m += r;
             }
         }
+        if (min == INT32_MAX) min = 0;
         big_m -= min;
 
         // For each u
@@ -539,7 +540,7 @@ void fourth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, ma
             for (int j=0; j < (int) subproblem_nodes.size(); j++)
             {
                 auto v = subproblem_nodes[j];   
-                if (v==u || v == o) continue;
+                if (v == u || v == o) continue;
                 auto v_id = graph.id(v);
                 auto e = findEdge(graph, u, v);
                 if (e != INVALID)
