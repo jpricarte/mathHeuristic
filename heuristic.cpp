@@ -29,6 +29,8 @@ typedef tuple<int, int> uv;
 typedef tuple<int, int, int> ouv;
 
 
+auto seed = 0xf0da5e;
+
 // Defining Graph elements
 Graph graph;
 int n, m; // Number of nodes and edges, respectively
@@ -248,10 +250,16 @@ vector<vector<double>> generateSubproblemsReq(const vector<Node>& subproblem_nod
         subproblem_requirements.push_back(vector<double>());
         for (auto j=0; j < (int) subproblem_nodes.size(); j++)
         {
-            auto u_id = graph.id(subproblem_nodes[i]);
-            auto v_id = graph.id(subproblem_nodes[j]);
-            subproblem_requirements[i].push_back(requirements[u_id][v_id]);
-            
+            if (j > i)
+            {
+                auto u_id = graph.id(subproblem_nodes[i]);
+                auto v_id = graph.id(subproblem_nodes[j]);
+                subproblem_requirements[i].push_back(requirements[u_id][v_id]);
+            }
+            else
+            {
+                subproblem_requirements[i].push_back(0);
+            }
         }
     }
 
@@ -308,8 +316,6 @@ void initVars(GRBModel& model, const vector<Node>& subproblem_nodes,
                 stringstream s;
                 s << "x(" << u_id << "," << v_id << ")";
                 auto x = model.addVar(0,1,0,GRB_BINARY, s.str());
-                // Uncomment this to use current subt-tree edges configuration
-                // x.set(GRB_DoubleAttr_Start,edges_tree[e]);
                 x_map.emplace(node_pair, x);
             }
         }
@@ -431,14 +437,17 @@ void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
         // for every arc going from u
         for (int j=0; j < (int) subproblem_nodes.size(); j++)
         {
+            if (i==j) 
+            {
+                continue;
+            }
+
             auto u = subproblem_nodes[j];
             auto u_id = graph.id(u);
 
             GRBLinExpr sum_out(0); // Flow of o going out of u (f_{o,u,v})
             for (int k=0; k < (int) subproblem_nodes.size(); k++)
             {
-                // Every node v except v=u and v=o
-                if (k==i || k==j) continue;
                 auto v = subproblem_nodes[k];
                 // If the edge (u,v) exists, add f(o,u,v) to constraint
                 if (findEdge(graph,u,v) != INVALID)
@@ -452,8 +461,6 @@ void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
             GRBLinExpr sum_in(0); // Flow of o coming to u (f_{o,v,u})
             for (int k=0; k < (int) subproblem_nodes.size(); k++)
             {
-                // Every node v except v=u and v=o
-                if (k==i || k==j) continue;
                 auto v = subproblem_nodes[k];
                 auto v_id = graph.id(v);
                 if (findEdge(graph,v,u) != INVALID)
@@ -594,19 +601,6 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
 {
     // Cria nova tabela de requisitos copiando os valores originais
     auto subproblem_requirements {generateSubproblemsReq(subproblem_nodes)};
-    // Após isso, soma os requisitos amarrados externamente ao vértice
-    // cout << endl;
-    // cout << "Im going" << endl;
-
-    for (auto linha : subproblem_requirements)
-    {
-        for (auto elem : linha)
-        {
-            cout << elem << "\t";
-        }
-        // cout << linha.size();
-        cout << endl;
-    }
 
     try
     {
@@ -643,18 +637,18 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
         //Avoid cicle constraint
         sixth_constraint(model, subproblem_nodes, pair_keys, x_map);
         
-        model.write("wrong.lp");
+        // model.write("wrong.lp");
         model.optimize();
         int status = model.get(GRB_IntAttr_Status);
         if( status == GRB_OPTIMAL)
         {
-            cout << "Success" << endl;
+            // cout << "Subproblem result: " << model.get(GRB_DoubleAttr_ObjVal) << endl;
             for (auto pair : pair_keys)
             {
                 auto x = x_map[pair];
                 auto x_name  = x.get(GRB_StringAttr_VarName);
                 auto x_value = (bool) x.get(GRB_DoubleAttr_X);
-                auto e = findEdge(graph, graph.nodeFromId(get<0>(pair)),graph.nodeFromId(get<1>(pair)));
+                auto e = findEdge(graph, graph.nodeFromId(get<0>(pair)), graph.nodeFromId(get<1>(pair)));
                 if (e != INVALID)
                 {
                     edges_tree[e] = x_value;
@@ -692,7 +686,7 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
 // TODO: Melhorar essa seleção (tá O(mn^4), da pra fazer melhor, mas assim to garantindo que não vai repetir)
 vector<Node> selectTwoClusters()
 {
-    // shuffle(clusters.begin(), clusters.end());
+    shuffle(clusters.begin(), clusters.end(), default_random_engine(seed++));
     vector<Node> final_cluster = {};
     for (auto node : clusters[0])
     {
@@ -728,36 +722,23 @@ vector<Node> selectTwoClusters()
 
 int main(int argc, char* argv[])
 {
-    bool debug = true;
+    bool debug = false;
     if (argc != 4)
     {
         perror("usage: ./heuristic inputFile clusterSize iterNum\n");
         return 1;
     }
 
-    srand(0xf0da5e);
+    srand(seed);
     env.set("LogFile", "heuristic_solver.log");
-    env.set("OutputFlag", "1");
+    env.set("OutputFlag", "0");
     env.start();
 
     // Inicialization
     // Read instance
     k = stoi(argv[2]);
+    int iterNum = atoi(argv[3]);
     readInstance(argv[1]);
-
-
-    // for (auto linha : requirements)
-    // {
-    //     // for (auto elem : linha)
-    //     // {
-    //     //     cout << elem << "\t";
-    //     // }
-    //     cout << linha.size();
-    //     cout << endl;
-    // }
-
-    // cout << "32, 2 - " << requirements[32][2] << endl;
-    // cout << "6, 5 - " << requirements[6][5] << endl;
 
     root = nodes[rand()%n];
     cout << "instance read" << endl;
@@ -767,10 +748,13 @@ int main(int argc, char* argv[])
     divideTree(root, INVALID);
     cout << "clusterized" << endl;
     cout << "clusters created: " << clusters.size() << endl;
-    printEdgesTree();
+    // printEdgesTree();
     // printClusters();
     cout << calculateObjective() << endl;
-    for (int i = 0; i < atoi(argv[3]); i++)
+
+    int five_percent = iterNum / 20;
+    cout << "[";
+    for (int i = 0; i < iterNum; i++)
     // while(clusters.size() > 1)
     {
         auto some_cluster = selectTwoClusters();
@@ -783,12 +767,16 @@ int main(int argc, char* argv[])
             cout << endl;
         }
         solveSubproblem(some_cluster);
-
+        if ((i % five_percent) == 0)
+        {
+            cout << "|";
+        }
     }
+    cout << "]";
     // printTree(root, INVALID);
     cout << calculateObjective() << endl;
     // printTree(root, INVALID);
-    printEdgesTree();
+    // printEdgesTree();
 
 	return 0;
 }
