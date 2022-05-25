@@ -682,39 +682,41 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
     }
 }
 
-
-// TODO: Melhorar essa seleção (tá O(mn^4), da pra fazer melhor, mas assim to garantindo que não vai repetir)
 vector<Node> selectTwoClusters()
 {
-    shuffle(clusters.begin(), clusters.end(), default_random_engine(seed++));
+    // selected clusters
+    int sel = rand() % clusters.size();
     vector<Node> final_cluster = {};
-    for (auto node : clusters[0])
+    // deep copy of first cluster
+    for (auto node : clusters[sel])
     {
         final_cluster.push_back(node);
     }
-    for (int i=1; i < (int) clusters.size(); i++)
+
+    int i = rand() % final_cluster.size();
+    Node sel_node = final_cluster[i];
+
+    for (auto cluster : clusters)
     {
-        for (auto u : clusters[i])
+        if (cluster == clusters[sel])
+            continue;
+
+        for (auto node : cluster)
         {
-            for (auto v : clusters[0])
+            if (node == sel_node || findEdge(tree, node, sel_node) != INVALID)
             {
-                if (u == v || (findEdge(tree, u, v) != INVALID))
+                for (auto node : cluster)
                 {
-                    for (auto node : clusters[i])
+                    if (find(final_cluster.begin(), final_cluster.end(), node) == final_cluster.end())
                     {
-                        if (find(final_cluster.begin(), final_cluster.end(), node) == final_cluster.end())
-                        {
-                            final_cluster.push_back(node);
-                        }
+                        final_cluster.push_back(node);
                     }
-                    clusters.erase(clusters.begin()+i);
-                    clusters.erase(clusters.begin());
-                    clusters.push_back(final_cluster);
-                    return final_cluster;
                 }
+                return final_cluster;
             }
         }
     }
+
     return final_cluster;
 }
 
@@ -772,7 +774,7 @@ int main(int argc, char* argv[])
             cout << "|";
         }
     }
-    cout << "]";
+    cout << "]" << endl;
     // printTree(root, INVALID);
     cout << calculateObjective() << endl;
     // printTree(root, INVALID);
