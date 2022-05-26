@@ -226,8 +226,14 @@ void addRequirements(int base_index, Node current, Node previous, vector<Node> s
     for (auto i=0; i < (int) subproblem_nodes.size(); i++)
     {
         auto node_id = graph.id(subproblem_nodes[i]);
-        (*subproblem_requirements)[base_index][i] += requirements[node_id][current_id];
-        (*subproblem_requirements)[i][base_index] += requirements[node_id][current_id];
+        if (i >= base_index)
+        {
+            (*subproblem_requirements)[base_index][i] += requirements[node_id][current_id];
+        }
+        else
+        {
+            (*subproblem_requirements)[i][base_index] += requirements[node_id][current_id];
+        }
     }
 
     for (auto e = Tree::IncEdgeIt(tree,current); e != INVALID; ++e)
@@ -282,7 +288,7 @@ vector<vector<double>> generateSubproblemsReq(const vector<Node>& subproblem_nod
 
     for (auto i=0; i < (int) subproblem_nodes.size(); i++)
     {
-        subproblem_requirements[i][i]=0;
+        subproblem_requirements[i][i] = 0;
     }
 
     return subproblem_requirements;
@@ -685,7 +691,6 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
 vector<Node> selectTwoClusters(int sel)
 {
     // selected clusters
-    // int sel = rand() % clusters.size();
     vector<Node> final_cluster = {};
     // deep copy of first cluster
     for (auto node : clusters[sel])
@@ -758,9 +763,12 @@ int main(int argc, char* argv[])
     cout << "[";
 
     // Uma vez por cluster
-    for (int i = 0; i < clusters.size(); i++)
+    // for (int i = 0; i < clusters.size(); i++)
+    // De acordo com o numero de iterações
+    for (int i=0; i < iterNum; i++)
     {
-        auto some_cluster = selectTwoClusters(i);
+        int sel = rand() % clusters.size();
+        auto some_cluster = selectTwoClusters(sel);
         if (debug)
         {
             for (auto node : some_cluster)
@@ -772,7 +780,7 @@ int main(int argc, char* argv[])
         solveSubproblem(some_cluster);
         if ((i % five_percent) == 0)
         {
-            // cout << "|";
+            cout << "|";
         }
     }
     cout << "]" << endl;
