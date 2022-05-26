@@ -733,7 +733,7 @@ int main(int argc, char* argv[])
     bool debug = false;
     if (argc != 5)
     {
-        perror("usage: ./heuristic inputFile clusterSize iterNum logFile\n");
+        perror("usage: ./heuristic inputFile logFile clusterSize iterNum \n");
         return 1;
     }
 
@@ -744,8 +744,8 @@ int main(int argc, char* argv[])
 
     // Inicialization
     // Read instance
-    k = stoi(argv[2]);
-    int iterNum = atoi(argv[3]);
+    k = stoi(argv[3]);
+    int iterNum = atoi(argv[4]);
     readInstance(argv[1]);
 
     root = nodes[rand()%n];
@@ -795,7 +795,7 @@ int main(int argc, char* argv[])
     // logFile
     auto exec_time = chrono::duration_cast<chrono::seconds>(stop - start);
     std::ofstream outfile;
-    outfile.open(argv[4], std::ios_base::app); // append instead of overwrite
+    outfile.open(argv[2], std::ios_base::app); // append instead of overwrite
     outfile << k << "," << iterNum << "," << exec_time.count() << endl;
     outfile.close();
     
