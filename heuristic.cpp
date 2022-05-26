@@ -682,10 +682,10 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
     }
 }
 
-vector<Node> selectTwoClusters()
+vector<Node> selectTwoClusters(int sel)
 {
     // selected clusters
-    int sel = rand() % clusters.size();
+    // int sel = rand() % clusters.size();
     vector<Node> final_cluster = {};
     // deep copy of first cluster
     for (auto node : clusters[sel])
@@ -756,10 +756,11 @@ int main(int argc, char* argv[])
 
     int five_percent = iterNum / 20;
     cout << "[";
-    for (int i = 0; i < iterNum; i++)
-    // while(clusters.size() > 1)
+
+    // Uma vez por cluster
+    for (int i = 0; i < clusters.size(); i++)
     {
-        auto some_cluster = selectTwoClusters();
+        auto some_cluster = selectTwoClusters(i);
         if (debug)
         {
             for (auto node : some_cluster)
@@ -771,7 +772,7 @@ int main(int argc, char* argv[])
         solveSubproblem(some_cluster);
         if ((i % five_percent) == 0)
         {
-            cout << "|";
+            // cout << "|";
         }
     }
     cout << "]" << endl;
