@@ -6,5 +6,5 @@ LIBRARY=-L/$(GUROBI_DIR)/lib/ -lgurobi_c++ -lgurobi95
 heuristic: heuristic.cpp
 	g++ $(FLAGS) heuristic.cpp -o heuristic $(INCLUDE) $(LIBRARY) 
 
-lp: lp.cpp
-	g++ $(FLAGS) lp.cpp -o lp $(INCLUDE) $(LIBRARY)
+static: heuristic.cpp
+	g++ $(FLAGS) heuristic.cpp -o heuristic $(INCLUDE) $(LIBRARY) --static

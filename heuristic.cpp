@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <chrono>
 #include <cmath>
 #include <vector>
 #include <map>
@@ -730,9 +731,9 @@ vector<Node> selectTwoClusters(int sel)
 int main(int argc, char* argv[])
 {
     bool debug = false;
-    if (argc != 4)
+    if (argc != 5)
     {
-        perror("usage: ./heuristic inputFile clusterSize iterNum\n");
+        perror("usage: ./heuristic inputFile clusterSize iterNum logFile\n");
         return 1;
     }
 
@@ -765,6 +766,7 @@ int main(int argc, char* argv[])
     // Uma vez por cluster
     // for (int i = 0; i < clusters.size(); i++)
     // De acordo com o numero de iterações
+    auto start = chrono::high_resolution_clock::now();
     for (int i=0; i < iterNum; i++)
     {
         int sel = rand() % clusters.size();
@@ -784,10 +786,18 @@ int main(int argc, char* argv[])
         }
     }
     cout << "]" << endl;
+    auto stop = chrono::high_resolution_clock::now();
     // printTree(root, INVALID);
     cout << calculateObjective() << endl;
     // printTree(root, INVALID);
     // printEdgesTree();
 
+    // logFile
+    auto exec_time = chrono::duration_cast<chrono::seconds>(stop - start);
+    std::ofstream outfile;
+    outfile.open(argv[4], std::ios_base::app); // append instead of overwrite
+    outfile << k << "," << iterNum << "," << exec_time.count() << endl;
+    outfile.close();
+    
 	return 0;
 }
