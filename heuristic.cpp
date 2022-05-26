@@ -788,7 +788,8 @@ int main(int argc, char* argv[])
     cout << "]" << endl;
     auto stop = chrono::high_resolution_clock::now();
     // printTree(root, INVALID);
-    cout << calculateObjective() << endl;
+    auto value = calculateObjective();
+    cout << value << endl;
     // printTree(root, INVALID);
     // printEdgesTree();
 
@@ -796,7 +797,7 @@ int main(int argc, char* argv[])
     auto exec_time = chrono::duration_cast<chrono::seconds>(stop - start);
     std::ofstream outfile;
     outfile.open(argv[2], std::ios_base::app); // append instead of overwrite
-    outfile << k << "," << iterNum << "," << exec_time.count() << endl;
+    outfile << k << "," << iterNum << "," << exec_time.count() << "," << value << endl;
     outfile.close();
     
 	return 0;
