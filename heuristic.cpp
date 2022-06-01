@@ -24,7 +24,7 @@ typedef lemon::ListGraph::Edge Edge;
 typedef lemon::ListGraph::EdgeMap<double> EdgeMapDouble;
 typedef lemon::ListGraph::EdgeMap<bool>   EdgeMapBool;
 typedef lemon::FilterEdges<Graph,EdgeMapBool> Tree;
-typedef lemon::FilterEdges<Graph,EdgeMapBool>::NodeMap<bool> TreeNodeMapBool;
+typedef lemon::FilterEdges<Graph,EdgeMapBool>::NodeMap<bool>    TreeNodeMapBool;
 typedef lemon::FilterNodes<Tree, vector<Node>> SubTree;
 typedef tuple<int, int> uv;
 typedef tuple<int, int, int> ouv;
@@ -53,7 +53,7 @@ vector<Node>* current_cluster = nullptr;
 GRBEnv env(false);
 
 
-void readInstance(string filename)
+void readInstance(char filename[])
 {
     // Stream and temporary vars
     ifstream instanceFile(filename);
@@ -220,9 +220,7 @@ void printTree(Node n, Node up)
 }
 
 
-void addRequirements(int base_index, Node current, Node previous,
-                     vector<Node> subproblem_nodes,
-                     vector<vector<double>> *subproblem_requirements)
+void addRequirements(int base_index, Node current, Node previous, vector<Node> subproblem_nodes, vector<vector<double>> *subproblem_requirements)
 {
     auto current_id = graph.id(current);
 
@@ -302,7 +300,7 @@ vector<vector<double>> generateSubproblemsReq(const vector<Node>& subproblem_nod
     FORMULAÇÃO MATEMATICA COMEÇA AQUI
 */
 
-void initVars(GRBModel& model, const vector<Node>& subproblem_nodes,
+void initVars(GRBModel& model, const vector<Node>& subproblem_nodes, 
               vector<uv>& pair_keys, vector<ouv>& triple_keys,
               map<uv, GRBVar>& x_map, map<ouv, GRBVar>& f_map, map<ouv, GRBVar>& y_map)
 {
@@ -395,7 +393,7 @@ void objective(GRBModel& model, const vector<Node>& subproblem_nodes, map<ouv, G
 
 // Origin sends the sum of all its requirements as initial flow
 // OK
-void first_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
+void first_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, 
                       const vector<vector<double>>& subproblem_requirements,
                       map<ouv, GRBVar>& f_map)
 {
@@ -434,8 +432,8 @@ void first_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
 
 
 // Flow conservation
-void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
-                       const vector<vector<double>>& subproblem_requirements,
+void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, 
+                       const vector<vector<double>>& subproblem_requirements, 
                        map<ouv, GRBVar>& f_map)
 {
     // For every vertex
@@ -446,7 +444,7 @@ void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
         // for every arc going from u
         for (int j=0; j < (int) subproblem_nodes.size(); j++)
         {
-            if (i==j)
+            if (i==j) 
             {
                 continue;
             }
@@ -485,10 +483,10 @@ void second_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
 
 // f(o,u,v) must b zero if arc is not used
 // Technically, it's the third and fourth constraint,
-// but using a single loop in all nodes set (avoiding u==v),
+// but using a single loop in all nodes set (avoiding u==v), 
 // it's possible to use the same constraint
-void third_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
-                      vector<vector<double>>& subproblem_requirements,
+void third_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, 
+                      vector<vector<double>>& subproblem_requirements, 
                       map<ouv, GRBVar>& f_map, map<ouv, GRBVar>& y_map)
 {
     // For each origin
@@ -555,7 +553,7 @@ void fourth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, ma
             auto u_id = graph.id(u);
             for (int j=0; j < (int) subproblem_nodes.size(); j++)
             {
-                auto v = subproblem_nodes[j];
+                auto v = subproblem_nodes[j];   
                 if (v == u || v == o) continue;
                 auto v_id = graph.id(v);
                 auto e = findEdge(graph, u, v);
@@ -645,7 +643,7 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
 
         //Avoid cicle constraint
         sixth_constraint(model, subproblem_nodes, pair_keys, x_map);
-
+        
         // model.write("wrong.lp");
         model.optimize();
         int status = model.get(GRB_IntAttr_Status);
@@ -664,7 +662,7 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
                 }
             }
             tree = Tree(graph, edges_tree);
-
+            
             while (!clusters.empty())
             {
                 clusters.pop_back();
@@ -728,48 +726,14 @@ vector<Node> selectTwoClusters(int sel)
     return final_cluster;
 }
 
-vector<Node> selectTwoClusters(int first, int second)
-{
-    vector<Node> final_cluster = {};
-    
-    for (auto node_one : clusters[first])
-    {
-        for (auto node_two : clusters[second])
-        {
-            // If clusters are connected, create a merged cluster
-            if (node_one == node_two || findEdge(tree, node_one, node_two) != INVALID)
-            {
-                for (auto node : clusters[first])
-                {
-                    final_cluster.push_back(node);
-                }
 
-                for (auto node : clusters[second])
-                {
-                    if (find(final_cluster.begin(), final_cluster.end(), node) == final_cluster.end())
-                    {
-                        final_cluster.push_back(node);
-                    }
-                }
-                return final_cluster;
-            }
-        }
-    }
-    return final_cluster;
-}
 
 int main(int argc, char* argv[])
 {
     bool debug = false;
-    cout << "received ";
-        for (int i=0; i<argc; i++)
-        {
-            cout << argv[i] << " ";
-        }
-        cout << endl;
-    if (argc != 4)
+    if (argc != 5)
     {
-        perror("usage: ./heuristic inputFile clusterSize iterNum \n");
+        perror("usage: ./heuristic inputFile logFile clusterSize iterNum \n");
         return 1;
     }
 
@@ -780,10 +744,9 @@ int main(int argc, char* argv[])
 
     // Inicialization
     // Read instance
-    k = stoi(argv[2]);
-    int iterNum = atoi(argv[3]);
-    string filename(argv[1]);
-    readInstance(filename);
+    k = stoi(argv[3]);
+    int iterNum = atoi(argv[4]);
+    readInstance(argv[1]);
 
     root = nodes[rand()%n];
     cout << "instance read" << endl;
@@ -797,67 +760,45 @@ int main(int argc, char* argv[])
     // printClusters();
     cout << calculateObjective() << endl;
 
-    int five_percent = 1;
-    if (iterNum > 20)
-        five_percent = iterNum / 20;
+    int five_percent = iterNum / 20;
     cout << "[";
 
+    // Uma vez por cluster
+    // for (int i = 0; i < clusters.size(); i++)
+    // De acordo com o numero de iterações
     auto start = chrono::high_resolution_clock::now();
-    // for (int i=0; i < iterNum; i++)
-    // {
-        // int sel = rand() % clusters.size();
-        // auto some_cluster = selectTwoClusters(sel);
-        // if (debug)
-        // {
-        //     for (auto node : some_cluster)
-        //     {
-        //         cout << graph.id(node) << " ";
-        //     }
-        //     cout << endl;
-        // }
-        // solveSubproblem(some_cluster);
-        // if ((i % five_percent) == 0)
-        // {
-        //     cout << "|";
-    // }
-    iterNum = 0;
-    for (int i = 0; i < clusters.size(); i++)
+    for (int i=0; i < iterNum; i++)
     {
-        for (int j = i+1; j < clusters.size(); j++)
+        int sel = rand() % clusters.size();
+        auto some_cluster = selectTwoClusters(sel);
+        if (debug)
         {
-            auto some_cluster = selectTwoClusters(i, j);
-            if (some_cluster.empty())
-                continue;
-            iterNum++;
-            solveSubproblem(some_cluster);
-            if (debug)
+            for (auto node : some_cluster)
             {
-                for (auto node : some_cluster)
-                {
-                    cout << graph.id(node) << " ";
-                }
-                cout << endl;
+                cout << graph.id(node) << " ";
             }
-        } 
+            cout << endl;
+        }
+        solveSubproblem(some_cluster);
+        if ((i % five_percent) == 0)
+        {
+            cout << "|";
+        }
     }
     cout << "]" << endl;
     auto stop = chrono::high_resolution_clock::now();
-    auto exec_time = chrono::duration_cast<chrono::seconds>(stop - start);
     // printTree(root, INVALID);
     auto value = calculateObjective();
     cout << value << endl;
     // printTree(root, INVALID);
     // printEdgesTree();
+
     // logFile
-    auto name_index = filename.find_last_of("/");
-    auto ext_index = filename.find_last_of(".");
-    auto stats_file = "./output/" + 
-                    filename.substr(name_index, ext_index) + 
-                    "_stats.csv";
+    auto exec_time = chrono::duration_cast<chrono::seconds>(stop - start);
     std::ofstream outfile;
-    outfile.open(stats_file, std::ios_base::app); // append instead of overwrite
+    outfile.open(argv[2], std::ios_base::app); // append instead of overwrite
     outfile << k << "," << iterNum << "," << exec_time.count() << "," << value << endl;
     outfile.close();
-
+    
 	return 0;
 }

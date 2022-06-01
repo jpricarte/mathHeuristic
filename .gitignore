@@ -1,7 +1,6 @@
 # Directories
 .ipynb_checkpoints
 .vscode
-output
 
 # Files
 backup*
