@@ -1,6 +1,7 @@
 # Directories
 .ipynb_checkpoints
 .vscode
+output
 
 # Files
 backup*
@@ -10,3 +11,4 @@ lp*
 *.lp
 heuristic
 req.*
+nohup
