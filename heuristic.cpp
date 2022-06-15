@@ -46,6 +46,9 @@ vector<vector<double>> requirements = {};
 EdgeMapBool edges_tree(graph);
 Tree tree(graph, edges_tree);
 TreeNodeMapBool in_some_cluster(tree, false);
+
+
+
 vector<vector<Node>> clusters;
 vector<Node>* current_cluster = nullptr;
 
@@ -128,17 +131,14 @@ double calculateObjective()
         dij.addSource(u);
         // Avoiding processing the u-u edge
         dij.processNextNode();
-        int counter = 0;
         while (!dij.emptyQueue())
         {
-            counter++;
             Node v = dij.processNextNode();
             // cout << graph.id(u) << " " << graph.id(v) << endl;
             double distance = dij.dist(v);
             double requirement = requirements[tree.id(u)][tree.id(v)];
             cost += distance * requirement;
         }
-        // cout << "esges visited: " << counter << endl;
     }
     return cost/2;
 }
@@ -325,6 +325,7 @@ void initVars(GRBModel& model, const vector<Node>& subproblem_nodes,
                 stringstream s;
                 s << "x(" << u_id << "," << v_id << ")";
                 auto x = model.addVar(0,1,0,GRB_BINARY, s.str());
+                x.set(GRB_DoubleAttr_Start, 1.0);
                 x_map.emplace(node_pair, x);
             }
         }
@@ -606,10 +607,12 @@ void sixth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
 }
 
 // TODO: Minimizar o número de laços, por enquanto é só pra garantir que funciona
-void solveSubproblem(const vector<Node> subproblem_nodes)
+void solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
 {
     // Cria nova tabela de requisitos copiando os valores originais
     auto subproblem_requirements {generateSubproblemsReq(subproblem_nodes)};
+
+    SubTree subtree(tree, subproblem_nodes);
 
     try
     {
@@ -660,6 +663,10 @@ void solveSubproblem(const vector<Node> subproblem_nodes)
                 auto e = findEdge(graph, graph.nodeFromId(get<0>(pair)), graph.nodeFromId(get<1>(pair)));
                 if (e != INVALID)
                 {
+                    if (edges_tree[e] != (bool) x_value)
+                    {
+                        *was_modified = true;
+                    }
                     edges_tree[e] = x_value;
                 }
             }
@@ -769,19 +776,19 @@ int main(int argc, char* argv[])
         cout << endl;
     if (argc != 4)
     {
-        perror("usage: ./heuristic inputFile clusterSize iterNum \n");
+        perror("usage: ./heuristic inputFile clusterSize maxIter \n");
         return 1;
     }
 
     srand(seed);
-    env.set("LogFile", "heuristic_solver.log");
+    // env.set("LogFile", "heuristic_solver.log");
     env.set("OutputFlag", "0");
     env.start();
 
     // Inicialization
     // Read instance
     k = stoi(argv[2]);
-    int iterNum = atoi(argv[3]);
+    int max_iter = atoi(argv[3]);
     string filename(argv[1]);
     readInstance(filename);
 
@@ -797,30 +804,10 @@ int main(int argc, char* argv[])
     // printClusters();
     cout << calculateObjective() << endl;
 
-    int five_percent = 1;
-    if (iterNum > 20)
-        five_percent = iterNum / 20;
-    cout << "[";
-
     auto start = chrono::high_resolution_clock::now();
-    // for (int i=0; i < iterNum; i++)
-    // {
-        // int sel = rand() % clusters.size();
-        // auto some_cluster = selectTwoClusters(sel);
-        // if (debug)
-        // {
-        //     for (auto node : some_cluster)
-        //     {
-        //         cout << graph.id(node) << " ";
-        //     }
-        //     cout << endl;
-        // }
-        // solveSubproblem(some_cluster);
-        // if ((i % five_percent) == 0)
-        // {
-        //     cout << "|";
-    // }
-    iterNum = 0;
+
+    int iterNum = 0;
+    vector<int> modified_clusters = {};
     for (int i = 0; i < clusters.size(); i++)
     {
         for (int j = i+1; j < clusters.size(); j++)
@@ -829,7 +816,20 @@ int main(int argc, char* argv[])
             if (some_cluster.empty())
                 continue;
             iterNum++;
-            solveSubproblem(some_cluster);
+            bool was_modified = false;
+            solveSubproblem(some_cluster, &was_modified);
+            if (was_modified)
+            {
+                if (find(modified_clusters.begin(), modified_clusters.end(), i) == modified_clusters.end())
+                {
+                    modified_clusters.push_back(i);
+                }
+                if (find(modified_clusters.begin(), modified_clusters.end(), j) == modified_clusters.end())
+                {
+                    modified_clusters.push_back(j);
+                }
+            }
+
             if (debug)
             {
                 for (auto node : some_cluster)
@@ -840,7 +840,39 @@ int main(int argc, char* argv[])
             }
         } 
     }
-    cout << "]" << endl;
+
+    while (!modified_clusters.empty() && iterNum < max_iter)
+    {
+        int i = modified_clusters.front();
+        modified_clusters.erase(modified_clusters.begin());
+        for (int j = 0; j < clusters.size(); j++)
+        {
+            cout << modified_clusters.size() << endl;
+            auto some_cluster = selectTwoClusters(i, j);
+            if (some_cluster.empty())
+                continue;
+            iterNum++;
+            bool was_modified = false;
+            solveSubproblem(some_cluster, &was_modified);
+            if (was_modified)
+            {
+                if (find(modified_clusters.begin(), modified_clusters.end(), j) == modified_clusters.end())
+                {
+                    modified_clusters.push_back(j);
+                }
+            }
+
+            if (debug)
+            {
+                for (auto node : some_cluster)
+                {
+                    cout << graph.id(node) << " ";
+                }
+                cout << endl;
+            }
+        }
+    }
+
     auto stop = chrono::high_resolution_clock::now();
     auto exec_time = chrono::duration_cast<chrono::seconds>(stop - start);
     // printTree(root, INVALID);
