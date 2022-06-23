@@ -25,11 +25,11 @@ typedef lemon::ListGraph::EdgeMap<double> EdgeMapDouble;
 typedef lemon::ListGraph::EdgeMap<bool>   EdgeMapBool;
 typedef lemon::FilterEdges<Graph,EdgeMapBool> Tree;
 typedef lemon::FilterEdges<Graph,EdgeMapBool>::NodeMap<bool> TreeNodeMapBool;
-typedef lemon::FilterNodes<Tree, vector<Node>> SubTree;
+typedef lemon::FilterNodes<Tree, TreeNodeMapBool> SubTree;
 typedef tuple<int, int> uv;
 typedef tuple<int, int, int> ouv;
 
-
+bool debug = false;
 auto seed = 0xf0da5e;
 
 // Defining Graph elements
@@ -141,6 +141,53 @@ double calculateObjective()
         }
     }
     return cost/2;
+}
+
+// Calculate the objective based on the real requirement, not the approximation
+double calculateSubproblemObjective(vector<Node> subproblem_nodes,
+                                    vector<vector<double>> subproblem_requirements)
+{
+    TreeNodeMapBool subtreeNodes(tree);
+    for (auto node : subproblem_nodes)
+    {
+        subtreeNodes[node] = true;
+    }
+    SubTree subtree(tree, subtreeNodes);
+    SubTree::EdgeMap<double> subproblem_lengths(subtree);
+    for (auto u : subproblem_nodes)
+    {
+        for (auto v : subproblem_nodes)
+        {
+            auto e = findEdge(tree, u, v);
+            if (e != INVALID)
+            {
+                subproblem_lengths[e] = lengths[e];
+            }
+        }
+    }
+
+    double cost = 0;
+    for (auto u : subproblem_nodes)
+    {
+        Dijkstra<SubTree, SubTree::EdgeMap<double>> dij(subtree, subproblem_lengths);
+        dij.init();
+        dij.addSource(u);
+        // Avoiding processing the u-u edge
+        dij.processNextNode();
+        while (!dij.emptyQueue())
+        {
+            Node v = dij.processNextNode();
+            // cout << graph.id(u) << " " << graph.id(v) << endl;
+            double distance = dij.dist(v);
+            int u_index = find(subproblem_nodes.begin(), subproblem_nodes.end(), u) 
+                        - subproblem_nodes.begin();
+            int v_index = find(subproblem_nodes.begin(), subproblem_nodes.end(), v)
+                        - subproblem_nodes.begin();
+            double requirement = subproblem_requirements[u_index][v_index];
+            cost += distance * requirement;
+        }
+    }
+    return cost;
 }
 
 void printClusters()
@@ -607,12 +654,12 @@ void sixth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
 }
 
 // TODO: Minimizar o número de laços, por enquanto é só pra garantir que funciona
-void solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
+double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
 {
     // Cria nova tabela de requisitos copiando os valores originais
     auto subproblem_requirements {generateSubproblemsReq(subproblem_nodes)};
 
-    SubTree subtree(tree, subproblem_nodes);
+    double curr_value = calculateSubproblemObjective(subproblem_nodes, subproblem_requirements);
 
     try
     {
@@ -654,36 +701,56 @@ void solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
         int status = model.get(GRB_IntAttr_Status);
         if( status == GRB_OPTIMAL)
         {
-            // cout << "Subproblem result: " << model.get(GRB_DoubleAttr_ObjVal) << endl;
-            for (auto pair : pair_keys)
+            if (model.get(GRB_DoubleAttr_ObjVal) < (curr_value - 1))
             {
-                auto x = x_map[pair];
-                auto x_name  = x.get(GRB_StringAttr_VarName);
-                auto x_value = (bool) x.get(GRB_DoubleAttr_X);
-                auto e = findEdge(graph, graph.nodeFromId(get<0>(pair)), graph.nodeFromId(get<1>(pair)));
-                if (e != INVALID)
+                if (debug)
                 {
-                    if (edges_tree[e] != (bool) x_value)
+                    cout << "optimized!" << endl;
+                    cout << "Subproblem result: " << model.get(GRB_DoubleAttr_ObjVal);
+                    cout << "; Original result: " << curr_value << endl;
+                }
+                for (auto pair : pair_keys)
+                {
+                    auto x = x_map[pair];
+                    auto x_name  = x.get(GRB_StringAttr_VarName);
+                    auto x_value = (bool) x.get(GRB_DoubleAttr_X);
+                    auto u = graph.nodeFromId(get<0>(pair));
+                    auto v = graph.nodeFromId(get<1>(pair));
+                    auto e = findEdge(graph, u, v);
+                    if (e != INVALID)
                     {
-                        *was_modified = true;
+                        if (edges_tree[e] != (bool) x_value)
+                        {
+                            *was_modified = true;
+                        }
+                        edges_tree[e] = x_value;
                     }
-                    edges_tree[e] = x_value;
+                }
+                tree = Tree(graph, edges_tree);
+
+                while (!clusters.empty())
+                {
+                    clusters.pop_back();
+                }
+                for (auto n : nodes)
+                {
+                    in_some_cluster[n] = false;
+                }
+                current_cluster = nullptr;
+                // reinicia clusters
+                // printEdgesTree();
+                divideTree(root, INVALID);
+                return model.get(GRB_DoubleAttr_ObjVal) - curr_value;
+            }
+            else
+            {
+                if (debug)
+                {
+                    cout << "no optimized" << endl;
+                    cout << "Subproblem result: " << model.get(GRB_DoubleAttr_ObjVal);
+                    cout << "; Original result: " << curr_value << endl;
                 }
             }
-            tree = Tree(graph, edges_tree);
-
-            while (!clusters.empty())
-            {
-                clusters.pop_back();
-            }
-            for (auto n : nodes)
-            {
-                in_some_cluster[n] = false;
-            }
-            current_cluster = nullptr;
-            // reinicia clusters
-            // printEdgesTree();
-            divideTree(root, INVALID);
         }
         else {
             cout << "fail" << endl;
@@ -696,6 +763,8 @@ void solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
     } catch(...) {
         cout << "Exception during optimization" << endl;
     }
+
+    return 0;
 }
 
 vector<Node> selectTwoClusters(int sel)
@@ -767,7 +836,6 @@ vector<Node> selectTwoClusters(int first, int second)
 
 int main(int argc, char* argv[])
 {
-    bool debug = false;
     cout << "received ";
         for (int i=0; i<argc; i++)
         {
@@ -802,7 +870,8 @@ int main(int argc, char* argv[])
     cout << "clusters created: " << clusters.size() << endl;
     // printEdgesTree();
     // printClusters();
-    cout << calculateObjective() << endl;
+    double objective = calculateObjective();
+    cout << objective << endl;
 
     auto start = chrono::high_resolution_clock::now();
 
@@ -817,7 +886,7 @@ int main(int argc, char* argv[])
                 continue;
             iterNum++;
             bool was_modified = false;
-            solveSubproblem(some_cluster, &was_modified);
+            auto diff = solveSubproblem(some_cluster, &was_modified);
             if (was_modified)
             {
                 if (find(modified_clusters.begin(), modified_clusters.end(), i) == modified_clusters.end())
@@ -828,6 +897,7 @@ int main(int argc, char* argv[])
                 {
                     modified_clusters.push_back(j);
                 }
+                objective += (diff/2);
             }
 
             if (debug)
@@ -847,19 +917,24 @@ int main(int argc, char* argv[])
         modified_clusters.erase(modified_clusters.begin());
         for (int j = 0; j < clusters.size(); j++)
         {
-            cout << modified_clusters.size() << endl;
+            if (debug)
+            {
+                cout << modified_clusters.size() << endl;
+            }
+            
             auto some_cluster = selectTwoClusters(i, j);
             if (some_cluster.empty())
                 continue;
             iterNum++;
             bool was_modified = false;
-            solveSubproblem(some_cluster, &was_modified);
+            auto diff = solveSubproblem(some_cluster, &was_modified);
             if (was_modified)
             {
                 if (find(modified_clusters.begin(), modified_clusters.end(), j) == modified_clusters.end())
                 {
                     modified_clusters.push_back(j);
                 }
+                objective += (diff/2);
             }
 
             if (debug)
@@ -878,6 +953,7 @@ int main(int argc, char* argv[])
     // printTree(root, INVALID);
     auto value = calculateObjective();
     cout << value << endl;
+    cout << objective << endl;
     // printTree(root, INVALID);
     // printEdgesTree();
     // logFile
