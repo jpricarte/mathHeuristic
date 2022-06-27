@@ -43,7 +43,7 @@ EdgeMapDouble lengths(graph);
 vector<vector<double>> requirements = {};
 
 // Defining Solution elements
-EdgeMapBool edges_tree(graph);
+EdgeMapBool edges_tree(graph, false);
 Tree tree(graph, edges_tree);
 TreeNodeMapBool in_some_cluster(tree, false);
 
@@ -116,9 +116,23 @@ void printEdgesTree()
     }
 }
 
-double generateInitialSolution()
+double generateInitialSolutionKruskal()
 {
     return kruskal(graph, lengths, edges_tree);
+}
+
+double generateInitialSolutionDijkstra()
+{
+    Dijkstra<Graph, EdgeMapDouble> dij(graph, lengths);
+    dij.run(root);
+    for (auto node : nodes)
+    {
+        Edge e = findEdge(graph, node, dij.predNode(node));
+        if (e != INVALID)
+        {
+            edges_tree[e] = true;
+        }
+    }
 }
 
 double calculateObjective()
@@ -834,6 +848,27 @@ vector<Node> selectTwoClusters(int first, int second)
     return final_cluster;
 }
 
+void choose_root(int mode)
+{
+    Graph::NodeMap<int> node_degree(graph, 0);
+    root = nodes[0];
+    for (auto node : nodes)
+    {
+        for (Graph::IncEdgeIt e(graph, node); e != INVALID; ++e) 
+        {
+            node_degree[node] += 1;
+        }
+        if (mode == 0 && node_degree[node] <= node_degree[root])
+        {
+            root = node;
+        }
+        else if (mode == 1 && node_degree[node] >= node_degree[root])
+        {
+            root = node;
+        }
+    }
+}
+
 int main(int argc, char* argv[])
 {
     cout << "received ";
@@ -842,9 +877,10 @@ int main(int argc, char* argv[])
             cout << argv[i] << " ";
         }
         cout << endl;
-    if (argc != 4)
+    if (argc != 5)
     {
-        perror("usage: ./heuristic inputFile clusterSize maxIter \n");
+        cout << "modes: 0 (minDegree), 1 (maxDegree)" << endl;
+        perror("usage: ./heuristic inputFile clusterSize maxIter mode \n");
         return 1;
     }
 
@@ -858,11 +894,13 @@ int main(int argc, char* argv[])
     k = stoi(argv[2]);
     int max_iter = atoi(argv[3]);
     string filename(argv[1]);
+    int mode = atoi(argv[4]);
     readInstance(filename);
-
-    root = nodes[rand()%n];
+    // root = nodes[rand()%n];
+    choose_root(mode);
     cout << "instance read" << endl;
-    generateInitialSolution();
+    generateInitialSolutionDijkstra();
+    
     cout << "initial solution generated" << endl;
     tree = Tree(graph, edges_tree);
     divideTree(root, INVALID);
@@ -872,7 +910,6 @@ int main(int argc, char* argv[])
     // printClusters();
     double objective = calculateObjective();
     cout << objective << endl;
-
     auto start = chrono::high_resolution_clock::now();
 
     int iterNum = 0;
@@ -953,7 +990,7 @@ int main(int argc, char* argv[])
     // printTree(root, INVALID);
     auto value = calculateObjective();
     cout << value << endl;
-    cout << objective << endl;
+    // cout << objective << endl;
     // printTree(root, INVALID);
     // printEdgesTree();
     // logFile
@@ -964,7 +1001,7 @@ int main(int argc, char* argv[])
                     "_stats.csv";
     std::ofstream outfile;
     outfile.open(stats_file, std::ios_base::app); // append instead of overwrite
-    outfile << k << "," << iterNum << "," << exec_time.count() << "," << value << endl;
+    outfile  << mode << "," << k << "," << iterNum << "," << exec_time.count() << "," << value << endl;
     outfile.close();
 
 	return 0;

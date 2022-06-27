@@ -1,0 +1,18 @@
+Set parameter Username
+Academic license - for non-commercial use only - expires 2023-06-17
+received ./heuristic ./instances/zoo-MRCT/Palmetto.in 15 500 0 
+instance read
+initial solution generated
+clusterized
+clusters created: 4
+3751.5
+Set parameter Username
+Academic license - for non-commercial use only - expires 2023-06-17
+received ./heuristic ./instances/zoo-MRCT/Palmetto.in 15 500 1 
+instance read
+initial solution generated
+clusterized
+clusters created: 4
+3526.45
+3314.56
+3302.62
