@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <gurobi_c++.h>
 #include <lemon/list_graph.h>
-#include <lemon/kruskal.h>
 #include <lemon/dijkstra.h>
 #include <lemon/adaptors.h>
 
@@ -30,7 +29,7 @@ typedef tuple<int, int> uv;
 typedef tuple<int, int, int> ouv;
 
 bool debug = false;
-auto seed = 0xf0da5e;
+auto seed = 0xcafe;
 
 // Defining Graph elements
 Graph graph;
@@ -45,10 +44,9 @@ vector<vector<double>> requirements = {};
 // Defining Solution elements
 EdgeMapBool edges_tree(graph, false);
 Tree tree(graph, edges_tree);
+
+// Cluster related things
 TreeNodeMapBool in_some_cluster(tree, false);
-
-
-
 vector<vector<Node>> clusters;
 vector<Node>* current_cluster = nullptr;
 
@@ -105,6 +103,8 @@ void readInstance(string filename)
     instanceFile.close();
 }
 
+
+// Print tree for debug
 void printEdgesTree()
 {
     for (auto edge : edges)
@@ -116,10 +116,19 @@ void printEdgesTree()
     }
 }
 
-double generateInitialSolutionKruskal()
+void printClusters()
 {
-    return kruskal(graph, lengths, edges_tree);
+    for (auto cluster : clusters)
+    {
+        cout << "{ ";
+        for (auto node : cluster)
+        {
+            cout << graph.id(node) << " ";
+        }
+        cout << "}" << endl;
+    }
 }
+
 
 double generateInitialSolutionDijkstra()
 {
@@ -133,6 +142,53 @@ double generateInitialSolutionDijkstra()
             edges_tree[e] = true;
         }
     }
+}
+
+// Return true if the graph contains a cycle
+bool containsCycle(Node n, Node up, TreeNodeMapBool& visited)
+{
+    bool has_cycle = false;
+    visited[n] = true;
+    for (Tree::IncEdgeIt e(tree, n); e != INVALID; ++e)
+    {
+        Node v = tree.oppositeNode(n,e);
+        if (v != up)
+        {
+            if (visited[v] == true)
+            {
+                return true;
+            }
+            has_cycle = containsCycle(v, n, visited);
+            // If some subgraph return a cycle, break the algorithm and return true
+            if (has_cycle) return has_cycle;
+        }
+    }
+    return false;
+}
+
+// Return true if the graph is a tree
+bool verifyTree()
+{
+    TreeNodeMapBool visited(tree, false);
+    bool contains_cycle = containsCycle(root, INVALID, visited);
+    if (contains_cycle)
+    {
+        cout << "graph contains cycle" << endl;
+        return !contains_cycle;
+    }
+    bool connected = true;
+    for (auto node : nodes)
+    {
+        if (!visited[node])
+        {
+            connected = false;
+            cout << "graph contains more than one connected component" << endl;
+            break;
+        }
+    }
+
+    // Is a tree if not contains cycle and is connected
+    return (!contains_cycle) && connected;
 }
 
 double calculateObjective()
@@ -204,19 +260,6 @@ double calculateSubproblemObjective(vector<Node> subproblem_nodes,
     return cost;
 }
 
-void printClusters()
-{
-    for (auto cluster : clusters)
-    {
-        cout << "{ ";
-        for (auto node : cluster)
-        {
-            cout << graph.id(node) << " ";
-        }
-        cout << "}" << endl;
-    }
-}
-
 void addToCluster(Node n)
 {
     if (current_cluster == nullptr)
@@ -266,21 +309,6 @@ bool divideTree(Node n, Node up)
     return true;
 }
 
-
-
-void printTree(Node n, Node up)
-{
-    for (Tree::IncEdgeIt e(tree, n); e != INVALID; ++e)
-    {
-        if (tree.oppositeNode(n,e) != up)
-        {
-            cout << tree.id(n) << " " << tree.id(tree.oppositeNode(n,e)) << endl;
-            printTree(tree.oppositeNode(n,e), n);
-        }
-    }
-}
-
-
 void addRequirements(int base_index, Node current, Node previous,
                      vector<Node> subproblem_nodes,
                      vector<vector<double>> *subproblem_requirements)
@@ -310,7 +338,6 @@ void addRequirements(int base_index, Node current, Node previous,
         addRequirements(base_index, node, current, subproblem_nodes, subproblem_requirements);
     }
 }
-
 
 vector<vector<double>> generateSubproblemsReq(const vector<Node>& subproblem_nodes)
 {
@@ -715,6 +742,12 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
         int status = model.get(GRB_IntAttr_Status);
         if( status == GRB_OPTIMAL)
         {
+            if (!verifyTree())
+            {
+                if (debug)
+                    perror("new solution not valid!\n");
+                return 0;
+            }
             if (model.get(GRB_DoubleAttr_ObjVal) < (curr_value - 1))
             {
                 if (debug)
@@ -767,7 +800,8 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
             }
         }
         else {
-            cout << "fail" << endl;
+            if (debug)
+                cout << "fail" << endl;
         }
 
     }
@@ -858,10 +892,12 @@ void choose_root(int mode)
         {
             node_degree[node] += 1;
         }
+        // Get node with lowest degree
         if (mode == 0 && node_degree[node] <= node_degree[root])
         {
             root = node;
         }
+        // Get node with higest degree
         else if (mode == 1 && node_degree[node] >= node_degree[root])
         {
             root = node;
@@ -896,11 +932,15 @@ int main(int argc, char* argv[])
     string filename(argv[1]);
     int mode = atoi(argv[4]);
     readInstance(filename);
-    // root = nodes[rand()%n];
     choose_root(mode);
     cout << "instance read" << endl;
     generateInitialSolutionDijkstra();
-    
+    if (!verifyTree())
+    {
+        perror("Initial solution not valid!\n");
+        printEdgesTree();
+        return 1;
+    }
     cout << "initial solution generated" << endl;
     tree = Tree(graph, edges_tree);
     divideTree(root, INVALID);
@@ -923,7 +963,7 @@ int main(int argc, char* argv[])
                 continue;
             iterNum++;
             bool was_modified = false;
-            auto diff = solveSubproblem(some_cluster, &was_modified);
+            solveSubproblem(some_cluster, &was_modified);
             if (was_modified)
             {
                 if (find(modified_clusters.begin(), modified_clusters.end(), i) == modified_clusters.end())
@@ -934,7 +974,6 @@ int main(int argc, char* argv[])
                 {
                     modified_clusters.push_back(j);
                 }
-                objective += (diff/2);
             }
 
             if (debug)
@@ -964,14 +1003,13 @@ int main(int argc, char* argv[])
                 continue;
             iterNum++;
             bool was_modified = false;
-            auto diff = solveSubproblem(some_cluster, &was_modified);
+            solveSubproblem(some_cluster, &was_modified);
             if (was_modified)
             {
                 if (find(modified_clusters.begin(), modified_clusters.end(), j) == modified_clusters.end())
                 {
                     modified_clusters.push_back(j);
                 }
-                objective += (diff/2);
             }
 
             if (debug)
@@ -987,13 +1025,8 @@ int main(int argc, char* argv[])
 
     auto stop = chrono::high_resolution_clock::now();
     auto exec_time = chrono::duration_cast<chrono::seconds>(stop - start);
-    // printTree(root, INVALID);
     auto value = calculateObjective();
     cout << value << endl;
-    // cout << objective << endl;
-    // printTree(root, INVALID);
-    // printEdgesTree();
-    // logFile
     auto name_index = filename.find_last_of("/");
     auto ext_index = filename.find_last_of(".");
     auto stats_file = "./output/" + 
