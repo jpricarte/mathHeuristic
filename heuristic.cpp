@@ -116,6 +116,7 @@ void printEdgesTree()
     }
 }
 
+// Print node clusters for debug
 void printClusters()
 {
     for (auto cluster : clusters)
@@ -129,7 +130,7 @@ void printClusters()
     }
 }
 
-
+// Generator
 double generateInitialSolutionDijkstra()
 {
     Dijkstra<Graph, EdgeMapDouble> dij(graph, lengths);
@@ -260,6 +261,7 @@ double calculateSubproblemObjective(vector<Node> subproblem_nodes,
     return cost;
 }
 
+// Aux function for tree division
 void addToCluster(Node n)
 {
     if (current_cluster == nullptr)
@@ -276,6 +278,7 @@ void addToCluster(Node n)
     }
 }
 
+// Generate clusters (subtrees)
 bool divideTree(Node n, Node up)
 {
     if (n==INVALID) return false;
@@ -309,6 +312,7 @@ bool divideTree(Node n, Node up)
     return true;
 }
 
+// Aux function for subproblem requirements
 void addRequirements(int base_index, Node current, Node previous,
                      vector<Node> subproblem_nodes,
                      vector<vector<double>> *subproblem_requirements)
@@ -483,7 +487,6 @@ void objective(GRBModel& model, const vector<Node>& subproblem_nodes, map<ouv, G
 
 
 // Origin sends the sum of all its requirements as initial flow
-// OK
 void first_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
                       const vector<vector<double>>& subproblem_requirements,
                       map<ouv, GRBVar>& f_map)
@@ -631,7 +634,6 @@ void third_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
 
 // Tree constraint for y
 // Each origin o must have exact n-1 y_{o,u,v} activated
-// OK
 void fourth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, map<ouv, GRBVar>& y_map)
 {
     for (auto o : subproblem_nodes)
@@ -660,7 +662,6 @@ void fourth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, ma
 }
 
 // Associate x_{u,v} to y_{o,u,v} xor y_{o,v,u}
-// OK
 void fifth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes, vector<uv> pair_keys,
                       map<uv, GRBVar>& x_map ,map<ouv, GRBVar>& y_map)
 {
@@ -694,7 +695,6 @@ void sixth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
     model.addConstr(cicle_constr_linexp, GRB_EQUAL, (subproblem_nodes.size()-1));
 }
 
-// TODO: Minimizar o número de laços, por enquanto é só pra garantir que funciona
 double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
 {
     // Cria nova tabela de requisitos copiando os valores originais
@@ -815,6 +815,8 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
     return 0;
 }
 
+
+// First way to select clusters
 vector<Node> selectTwoClusters(int sel)
 {
     // selected clusters
@@ -852,6 +854,7 @@ vector<Node> selectTwoClusters(int sel)
     return final_cluster;
 }
 
+// Second way to select clusters
 vector<Node> selectTwoClusters(int first, int second)
 {
     vector<Node> final_cluster = {};
@@ -882,6 +885,7 @@ vector<Node> selectTwoClusters(int first, int second)
     return final_cluster;
 }
 
+// Choose root using selected approach
 void choose_root(int mode)
 {
     Graph::NodeMap<int> node_degree(graph, 0);
@@ -946,8 +950,6 @@ int main(int argc, char* argv[])
     divideTree(root, INVALID);
     cout << "clusterized" << endl;
     cout << "clusters created: " << clusters.size() << endl;
-    // printEdgesTree();
-    // printClusters();
     double objective = calculateObjective();
     cout << objective << endl;
     auto start = chrono::high_resolution_clock::now();
