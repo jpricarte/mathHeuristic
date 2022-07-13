@@ -28,7 +28,7 @@ typedef lemon::FilterNodes<Tree, TreeNodeMapBool> SubTree;
 typedef tuple<int, int> uv;
 typedef tuple<int, int, int> ouv;
 
-bool debug = false;
+const bool debug = false;
 auto seed = 0xcafe;
 
 // Defining Graph elements
@@ -59,7 +59,7 @@ void readInstance(string filename)
     // Stream and temporary vars
     ifstream instanceFile(filename);
     string e1, e2, e3;
-    uint16_t u, v;
+    unsigned int u, v;
     double value;
 
     // Get graph size (n for nodes and m for edges) and resizing everything
@@ -133,16 +133,23 @@ void printClusters()
 // Generator
 double generateInitialSolutionDijkstra()
 {
+    for (auto edge : edges)
+    {
+        edges_tree[edge] = false;
+    }
     Dijkstra<Graph, EdgeMapDouble> dij(graph, lengths);
     dij.run(root);
+    double length_sum = 0.0;
     for (auto node : nodes)
     {
         Edge e = findEdge(graph, node, dij.predNode(node));
         if (e != INVALID)
         {
+            if (!edges_tree[e]) length_sum += lengths[e];
             edges_tree[e] = true;
         }
     }
+    return length_sum;
 }
 
 // Return true if the graph contains a cycle
@@ -218,11 +225,13 @@ double calculateObjective()
 double calculateSubproblemObjective(vector<Node> subproblem_nodes,
                                     vector<vector<double>> subproblem_requirements)
 {
-    TreeNodeMapBool subtreeNodes(tree);
+
+    TreeNodeMapBool subtreeNodes(tree, false);
     for (auto node : subproblem_nodes)
     {
         subtreeNodes[node] = true;
     }
+
     SubTree subtree(tree, subtreeNodes);
     SubTree::EdgeMap<double> subproblem_lengths(subtree);
     for (auto u : subproblem_nodes)
@@ -248,6 +257,7 @@ double calculateSubproblemObjective(vector<Node> subproblem_nodes,
         while (!dij.emptyQueue())
         {
             Node v = dij.processNextNode();
+            if (u == v) continue;
             // cout << graph.id(u) << " " << graph.id(v) << endl;
             double distance = dij.dist(v);
             int u_index = find(subproblem_nodes.begin(), subproblem_nodes.end(), u) 
@@ -258,18 +268,22 @@ double calculateSubproblemObjective(vector<Node> subproblem_nodes,
             cost += distance * requirement;
         }
     }
-    return cost;
+    return cost / 2;
 }
 
 // Aux function for tree division
 void addToCluster(Node n)
 {
+    // If the current cluster is empty (doesn't exists yet) create it and add the node
     if (current_cluster == nullptr)
     {
         current_cluster = new vector<Node>();
     }
+
     in_some_cluster[n] = true;
     current_cluster->push_back(n);
+
+    // If the cluster is full, add cluster to clusters list
     if (current_cluster->size() == k)
     {
         clusters.push_back(*current_cluster);
@@ -281,7 +295,8 @@ void addToCluster(Node n)
 // Generate clusters (subtrees)
 bool divideTree(Node n, Node up)
 {
-    if (n==INVALID) return false;
+    if (n==INVALID) 
+        return false;
 
     if (!in_some_cluster[n])
     {
@@ -291,11 +306,14 @@ bool divideTree(Node n, Node up)
 
     for (Tree::EdgeIt it(tree); it != INVALID; ++it)
     {
-        Node next_node = tree.oppositeNode(n, it);
+        auto next_node = tree.oppositeNode(n, it);
         if (next_node == up) continue;
+        
+        // Recursive call to next node, return true if node exists in tree
         bool node_exists = divideTree(next_node, n);
         if (node_exists)
         {
+            // If the current cluster still not full, and this node wasn't in this cluster, add to the current cluster
             if (current_cluster != nullptr &&
                 find(current_cluster->begin(), current_cluster->end(), n) == current_cluster->end())
             {
@@ -304,6 +322,45 @@ bool divideTree(Node n, Node up)
             }
         }
     }
+    // If is the root node, add current cluster to the clusters list
+    if (up == INVALID && current_cluster != nullptr)
+    {
+        clusters.push_back(*current_cluster);
+        current_cluster = nullptr;
+    }
+    return true;
+}
+
+bool divideSubTree(Node n, Node up, SubTree& subtree)
+{
+    if (n==INVALID) 
+        return false;
+
+    if (!in_some_cluster[n])
+    {
+        // cout << "Node " << tree.id(n) << " added for the first time" << endl;
+        addToCluster(n);
+    }
+
+    for (SubTree::EdgeIt it(subtree); it != INVALID; ++it)
+    {
+        auto next_node = subtree.oppositeNode(n, it);
+        if (next_node == up) continue;
+        
+        // Recursive call to next node, return true if node exists in tree
+        bool node_exists = divideSubTree(next_node, n, subtree);
+        if (node_exists)
+        {
+            // If the current cluster still not full, and this node wasn't in this cluster, add to the current cluster
+            if (current_cluster != nullptr &&
+                find(current_cluster->begin(), current_cluster->end(), n) == current_cluster->end())
+            {
+                // cout << "Node " << tree.id(n) << " added for connection" << endl;
+                addToCluster(n);
+            }
+        }
+    }
+    // If is the root node, add current cluster to the clusters list
     if (up == INVALID && current_cluster != nullptr)
     {
         clusters.push_back(*current_cluster);
@@ -313,16 +370,25 @@ bool divideTree(Node n, Node up)
 }
 
 // Aux function for subproblem requirements
-void addRequirements(int base_index, Node current, Node previous,
+/*
+    base-index: indice no vetor do subproblema da aresta da árvore que será adicionada
+    current: vértice que está sendo analizado nesse momento
+    previous: último vértice analisado, apenas para evitar volta
+    outros: vetores comuns
+*/
+void addRequirements(int base_index, Node current , Node previous,
                      vector<Node> subproblem_nodes,
                      vector<vector<double>> *subproblem_requirements)
 {
     auto current_id = graph.id(current);
 
+    // Para cada vértice da árvore
     for (auto i=0; i < (int) subproblem_nodes.size(); i++)
     {
+        // Inicialmente, o requerimento entre o vértice da árvore que será sobrecarregado (base_index)
+        // e os outros vértices receberá uma soma do requerimento do novo vértice (current)
         auto node_id = graph.id(subproblem_nodes[i]);
-        if (i >= base_index)
+        if (i > base_index)
         {
             (*subproblem_requirements)[base_index][i] += requirements[node_id][current_id];
         }
@@ -332,6 +398,8 @@ void addRequirements(int base_index, Node current, Node previous,
         }
     }
 
+    // Recursivamente, vai para os outros vértices ligados a esse que ainda não foram acessados
+    // Por ser uma árvore, não precisamos de controle de acessados
     for (auto e = Tree::IncEdgeIt(tree,current); e != INVALID; ++e)
     {
         auto node = tree.oppositeNode(current, e);
@@ -349,6 +417,8 @@ vector<vector<double>> generateSubproblemsReq(const vector<Node>& subproblem_nod
     for (auto i=0; i < (int) subproblem_nodes.size(); i++)
     {
         subproblem_requirements.push_back(vector<double>());
+
+        // Cria matriz auxiliar de requerimentos (triangular superior)
         for (auto j=0; j < (int) subproblem_nodes.size(); j++)
         {
             if (j > i)
@@ -366,14 +436,14 @@ vector<vector<double>> generateSubproblemsReq(const vector<Node>& subproblem_nod
 
     for (auto i=0; i < (int) subproblem_nodes.size(); i++)
     {
-
+        // Para cada vértice u
         auto u = subproblem_nodes[i];
         // itera sobre as arestas,
         for (auto e = Tree::IncEdgeIt(tree,u); e != INVALID; ++e)
         {
             auto v = tree.oppositeNode(u, e);
             // se o vertice oposto não estiver no subproblema,
-            // vai somando todos os requisitos dos outros pra esse
+            // vai somando todos os requisitos dos vértices agregados para ele
             if (find(subproblem_nodes.begin(), subproblem_nodes.end(), v) == subproblem_nodes.end())
             {
                 addRequirements(i, v, u, subproblem_nodes, &subproblem_requirements);
@@ -700,7 +770,7 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
     // Cria nova tabela de requisitos copiando os valores originais
     auto subproblem_requirements {generateSubproblemsReq(subproblem_nodes)};
 
-    double curr_value = calculateSubproblemObjective(subproblem_nodes, subproblem_requirements);
+    double init_value = calculateSubproblemObjective(subproblem_nodes, subproblem_requirements);
 
     try
     {
@@ -742,19 +812,20 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
         int status = model.get(GRB_IntAttr_Status);
         if( status == GRB_OPTIMAL)
         {
+            auto solver_result = model.get(GRB_DoubleAttr_ObjVal) / 2;
             if (!verifyTree())
             {
                 if (debug)
                     perror("new solution not valid!\n");
                 return 0;
             }
-            if (model.get(GRB_DoubleAttr_ObjVal) < (curr_value - 1))
+            if ((solver_result - init_value) < 0)
             {
                 if (debug)
                 {
                     cout << "optimized!" << endl;
-                    cout << "Subproblem result: " << model.get(GRB_DoubleAttr_ObjVal);
-                    cout << "; Original result: " << curr_value << endl;
+                    cout << "Subproblem result: " << solver_result;
+                    cout << "; Original result: " << init_value << endl;
                 }
                 for (auto pair : pair_keys)
                 {
@@ -786,16 +857,30 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
                 current_cluster = nullptr;
                 // reinicia clusters
                 // printEdgesTree();
+
                 divideTree(root, INVALID);
-                return model.get(GRB_DoubleAttr_ObjVal) - curr_value;
+
+                // TreeNodeMapBool subtreeNodes(tree, false);
+                // for (auto node : subproblem_nodes)
+                // {
+                //     subtreeNodes[node] = true;
+                // }
+
+                // SubTree subtree(tree, subtreeNodes);
+
+                // divideSubTree(root, INVALID, subtree);
+                printClusters();
+                cout << "----" << endl;
+
+                return solver_result - init_value;
             }
             else
             {
                 if (debug)
                 {
                     cout << "no optimized" << endl;
-                    cout << "Subproblem result: " << model.get(GRB_DoubleAttr_ObjVal);
-                    cout << "; Original result: " << curr_value << endl;
+                    cout << "Subproblem result: " << solver_result;
+                    cout << "; Original result: " << init_value << endl;
                 }
             }
         }
@@ -885,28 +970,23 @@ vector<Node> selectTwoClusters(int first, int second)
     return final_cluster;
 }
 
-// Choose root using selected approach
-void choose_root(int mode)
+// Select root using min_paths approach
+void chooseRoot()
 {
-    Graph::NodeMap<int> node_degree(graph, 0);
-    root = nodes[0];
+    auto min_root = nodes[0];
+    double min_length = INT32_MAX;
     for (auto node : nodes)
     {
-        for (Graph::IncEdgeIt e(graph, node); e != INVALID; ++e) 
+        root = node;
+        auto curr_length = generateInitialSolutionDijkstra();
+        if (curr_length < min_length)
         {
-            node_degree[node] += 1;
-        }
-        // Get node with lowest degree
-        if (mode == 0 && node_degree[node] <= node_degree[root])
-        {
-            root = node;
-        }
-        // Get node with higest degree
-        else if (mode == 1 && node_degree[node] >= node_degree[root])
-        {
-            root = node;
+            min_root = node;
+            min_length = curr_length;
         }
     }
+    root = min_root;
+    generateInitialSolutionDijkstra();
 }
 
 int main(int argc, char* argv[])
@@ -917,9 +997,8 @@ int main(int argc, char* argv[])
             cout << argv[i] << " ";
         }
         cout << endl;
-    if (argc != 5)
+    if (argc != 4)
     {
-        cout << "modes: 0 (minDegree), 1 (maxDegree)" << endl;
         perror("usage: ./heuristic inputFile clusterSize maxIter mode \n");
         return 1;
     }
@@ -934,9 +1013,8 @@ int main(int argc, char* argv[])
     k = stoi(argv[2]);
     int max_iter = atoi(argv[3]);
     string filename(argv[1]);
-    int mode = atoi(argv[4]);
     readInstance(filename);
-    choose_root(mode);
+    chooseRoot();
     cout << "instance read" << endl;
     generateInitialSolutionDijkstra();
     if (!verifyTree())
@@ -956,6 +1034,7 @@ int main(int argc, char* argv[])
 
     int iterNum = 0;
     vector<int> modified_clusters = {};
+
     for (int i = 0; i < clusters.size(); i++)
     {
         for (int j = i+1; j < clusters.size(); j++)
@@ -965,7 +1044,16 @@ int main(int argc, char* argv[])
                 continue;
             iterNum++;
             bool was_modified = false;
-            solveSubproblem(some_cluster, &was_modified);
+            auto diff = solveSubproblem(some_cluster, &was_modified); // return the diference between the original value and the new solution
+            auto new_objective = objective + diff;
+
+            if (new_objective < objective)
+            {
+                if (debug)
+                    cout << "melhorou" << endl;
+                objective = new_objective;
+            }                
+
             if (was_modified)
             {
                 if (find(modified_clusters.begin(), modified_clusters.end(), i) == modified_clusters.end())
@@ -989,10 +1077,15 @@ int main(int argc, char* argv[])
         } 
     }
 
+
+    // After run in every cluster at least once,
+    // iterate until clusters dosen't modify anymore or until
+    // the iteration limit is reached
     while (!modified_clusters.empty() && iterNum < max_iter)
     {
         int i = modified_clusters.front();
         modified_clusters.erase(modified_clusters.begin());
+        
         for (int j = 0; j < clusters.size(); j++)
         {
             if (debug)
@@ -1005,7 +1098,14 @@ int main(int argc, char* argv[])
                 continue;
             iterNum++;
             bool was_modified = false;
-            solveSubproblem(some_cluster, &was_modified);
+            auto diff = solveSubproblem(some_cluster, &was_modified); // return the diference between the original value and the new solution
+            auto new_objective = objective + diff;
+            if (new_objective < objective)
+            {
+                if (debug)
+                    cout << "melhorou" << endl;
+                objective = new_objective;
+            }  
             if (was_modified)
             {
                 if (find(modified_clusters.begin(), modified_clusters.end(), j) == modified_clusters.end())
@@ -1028,7 +1128,8 @@ int main(int argc, char* argv[])
     auto stop = chrono::high_resolution_clock::now();
     auto exec_time = chrono::duration_cast<chrono::seconds>(stop - start);
     auto value = calculateObjective();
-    cout << value << endl;
+    cout << "calculado: " << value << endl;
+    cout << "atualizado: " << objective << endl;
     auto name_index = filename.find_last_of("/");
     auto ext_index = filename.find_last_of(".");
     auto stats_file = "./output/" + 
@@ -1036,7 +1137,7 @@ int main(int argc, char* argv[])
                     "_stats.csv";
     std::ofstream outfile;
     outfile.open(stats_file, std::ios_base::app); // append instead of overwrite
-    outfile  << mode << "," << k << "," << iterNum << "," << exec_time.count() << "," << value << endl;
+    outfile << k << "," << iterNum << "," << exec_time.count() << "," << value << endl;
     outfile.close();
 
 	return 0;
