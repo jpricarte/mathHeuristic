@@ -268,7 +268,7 @@ double calculateSubproblemObjective(vector<Node> subproblem_nodes,
             cost += distance * requirement;
         }
     }
-    return cost / 2;
+    return cost;
 }
 
 // Aux function for tree division
@@ -331,12 +331,16 @@ bool divideTree(Node n, Node up)
     return true;
 }
 
+
+// TODO: arrumar isso pra fazer funcionar: rever a lógica do zero
 bool divideSubTree(Node n, Node up, SubTree& subtree)
 {
-    if (n==INVALID) 
+    bool in_tree = subtree.status(n);
+    // If n is invalid or not in subtree, return false
+    if (n==INVALID || !in_tree) 
         return false;
 
-    if (!in_some_cluster[n])
+    if (!in_some_cluster[n] && in_tree)
     {
         // cout << "Node " << tree.id(n) << " added for the first time" << endl;
         addToCluster(n);
@@ -345,7 +349,7 @@ bool divideSubTree(Node n, Node up, SubTree& subtree)
     for (SubTree::EdgeIt it(subtree); it != INVALID; ++it)
     {
         auto next_node = subtree.oppositeNode(n, it);
-        if (next_node == up) continue;
+        if (next_node == up || !subtree.status(n)) continue;
         
         // Recursive call to next node, return true if node exists in tree
         bool node_exists = divideSubTree(next_node, n, subtree);
@@ -371,7 +375,8 @@ bool divideSubTree(Node n, Node up, SubTree& subtree)
 
 // Aux function for subproblem requirements
 /*
-    base-index: indice no vetor do subproblema da aresta da árvore que será adicionada
+    base-index: indice no vetor do subproblema da aresta
+a árvore que será adicionada
     current: vértice que está sendo analizado nesse momento
     previous: último vértice analisado, apenas para evitar volta
     outros: vetores comuns
@@ -812,14 +817,14 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
         int status = model.get(GRB_IntAttr_Status);
         if( status == GRB_OPTIMAL)
         {
-            auto solver_result = model.get(GRB_DoubleAttr_ObjVal) / 2;
+            auto solver_result = model.get(GRB_DoubleAttr_ObjVal);
             if (!verifyTree())
             {
                 if (debug)
                     perror("new solution not valid!\n");
                 return 0;
             }
-            if ((solver_result - init_value) < 0)
+            if ((solver_result < init_value)) // Update tree only if we got a better solution
             {
                 if (debug)
                 {
@@ -844,33 +849,26 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
                         edges_tree[e] = x_value;
                     }
                 }
-                tree = Tree(graph, edges_tree);
 
-                while (!clusters.empty())
+                tree = Tree(graph, edges_tree);
+                TreeNodeMapBool in_subtree(tree, false);
+                // while (!clusters.empty())
+                // {
+                //     clusters.pop_back();
+                // }
+                for (auto n : subproblem_nodes)
                 {
-                    clusters.pop_back();
-                }
-                for (auto n : nodes)
-                {
+                    in_subtree[n] = true;
                     in_some_cluster[n] = false;
                 }
+                SubTree subtree(tree, in_subtree);
                 current_cluster = nullptr;
-                // reinicia clusters
-                // printEdgesTree();
 
-                divideTree(root, INVALID);
+                // divideTree(root, INVALID);
+                divideSubTree(subproblem_nodes[0], INVALID, subtree);
 
-                // TreeNodeMapBool subtreeNodes(tree, false);
-                // for (auto node : subproblem_nodes)
-                // {
-                //     subtreeNodes[node] = true;
-                // }
-
-                // SubTree subtree(tree, subtreeNodes);
-
-                // divideSubTree(root, INVALID, subtree);
-                printClusters();
-                cout << "----" << endl;
+                // printClusters();
+                // cout << "----" << endl;
 
                 return solver_result - init_value;
             }
@@ -887,6 +885,7 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
         else {
             if (debug)
                 cout << "fail" << endl;
+            return 0;
         }
 
     }
@@ -1039,14 +1038,19 @@ int main(int argc, char* argv[])
     {
         for (int j = i+1; j < clusters.size(); j++)
         {
+            printClusters();
+            cout << "---------" << endl;
             auto some_cluster = selectTwoClusters(i, j);
             if (some_cluster.empty())
                 continue;
             iterNum++;
             bool was_modified = false;
-            auto diff = solveSubproblem(some_cluster, &was_modified); // return the diference between the original value and the new solution
-            auto new_objective = objective + diff;
+            clusters.erase(clusters.begin() + i);
+            clusters.erase(clusters.begin() + j);
+            // return the diference between the original value and the new solution
+            auto diff = solveSubproblem(some_cluster, &was_modified); 
 
+            auto new_objective = objective + diff;
             if (new_objective < objective)
             {
                 if (debug)
@@ -1054,6 +1058,7 @@ int main(int argc, char* argv[])
                 objective = new_objective;
             }                
 
+            // Add to modified_clusters if not in there yet
             if (was_modified)
             {
                 if (find(modified_clusters.begin(), modified_clusters.end(), i) == modified_clusters.end())
@@ -1085,9 +1090,10 @@ int main(int argc, char* argv[])
     {
         int i = modified_clusters.front();
         modified_clusters.erase(modified_clusters.begin());
-        
         for (int j = 0; j < clusters.size(); j++)
         {
+            if (i == j) continue;
+
             if (debug)
             {
                 cout << modified_clusters.size() << endl;
@@ -1098,7 +1104,8 @@ int main(int argc, char* argv[])
                 continue;
             iterNum++;
             bool was_modified = false;
-            auto diff = solveSubproblem(some_cluster, &was_modified); // return the diference between the original value and the new solution
+            // return the diference between the original value and the new solution
+            auto diff = solveSubproblem(some_cluster, &was_modified); 
             auto new_objective = objective + diff;
             if (new_objective < objective)
             {
