@@ -332,45 +332,11 @@ bool divideTree(Node n, Node up)
 }
 
 
-// TODO: arrumar isso pra fazer funcionar: rever a lógica do zero
 bool divideSubTree(Node n, Node up, SubTree& subtree)
 {
-    bool in_tree = subtree.status(n);
-    // If n is invalid or not in subtree, return false
-    if (n==INVALID || !in_tree) 
-        return false;
-
-    if (!in_some_cluster[n] && in_tree)
-    {
-        // cout << "Node " << tree.id(n) << " added for the first time" << endl;
-        addToCluster(n);
-    }
-
-    for (SubTree::EdgeIt it(subtree); it != INVALID; ++it)
-    {
-        auto next_node = subtree.oppositeNode(n, it);
-        if (next_node == up || !subtree.status(n)) continue;
-        
-        // Recursive call to next node, return true if node exists in tree
-        bool node_exists = divideSubTree(next_node, n, subtree);
-        if (node_exists)
-        {
-            // If the current cluster still not full, and this node wasn't in this cluster, add to the current cluster
-            if (current_cluster != nullptr &&
-                find(current_cluster->begin(), current_cluster->end(), n) == current_cluster->end())
-            {
-                // cout << "Node " << tree.id(n) << " added for connection" << endl;
-                addToCluster(n);
-            }
-        }
-    }
-    // If is the root node, add current cluster to the clusters list
-    if (up == INVALID && current_cluster != nullptr)
-    {
-        clusters.push_back(*current_cluster);
-        current_cluster = nullptr;
-    }
-    return true;
+    // Conta a adjacencia acumulada de cada vértice
+    // Pega aquele vértice que possui ceil(#V/2)
+    return false;
 }
 
 // Aux function for subproblem requirements
