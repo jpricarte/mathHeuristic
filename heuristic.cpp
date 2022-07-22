@@ -331,11 +331,29 @@ bool divideTree(Node n, Node up)
     return true;
 }
 
-
-bool divideSubTree(Node n, Node up, SubTree& subtree)
+void countNodesInEdge(Node u, Edge from, SubTree& subtree, SubTree::EdgeMap<int>& nodesBellow)
 {
-    // Conta a adjacencia acumulada de cada vértice
-    // Pega aquele vértice que possui ceil(#V/2)
+    for (SubTree::IncEdgeIt it(subtree,u); it != INVALID; ++it)
+    {
+        Node v = subtree.oppositeNode(u, from);
+
+        if (it == from) continue;
+        countNodesInEdge()
+        nodesBellow[from] += nodesBellow[it];
+    }
+}
+
+bool splitByEdge(Node n, Edge from, SubTree& subtree)
+{
+    // From root, count nodes bellow each edge
+    SubTree::EdgeMap<int> nodesBellow(subtree, 1);
+
+    // 
+    return false;
+}
+
+bool splitByNode(Node n, Node up, SubTree& subtree)
+{
     return false;
 }
 
@@ -831,7 +849,7 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
                 current_cluster = nullptr;
 
                 // divideTree(root, INVALID);
-                divideSubTree(subproblem_nodes[0], INVALID, subtree);
+                splitByEdge(subproblem_nodes[0], INVALID, subtree);
 
                 // printClusters();
                 // cout << "----" << endl;
