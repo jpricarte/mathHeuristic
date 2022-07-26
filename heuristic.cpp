@@ -331,30 +331,77 @@ bool divideTree(Node n, Node up)
     return true;
 }
 
-void countNodesInEdge(Node u, Edge from, SubTree& subtree, SubTree::EdgeMap<int>& nodesBellow)
+void countNodesInEdge(Node u, Node from, SubTree& subtree, SubTree::EdgeMap<int>& nodes_bellow)
 {
+    Edge curr_edge = findEdge(subtree, u, from);
     for (SubTree::IncEdgeIt it(subtree,u); it != INVALID; ++it)
     {
-        Node v = subtree.oppositeNode(u, from);
-
-        if (it == from) continue;
-        countNodesInEdge()
-        nodesBellow[from] += nodesBellow[it];
+        Node v = subtree.oppositeNode(u, it);
+        if (v == from) continue;
+        countNodesInEdge(v, u, subtree, nodes_bellow);
+        if (curr_edge == INVALID) continue;
+        nodes_bellow[curr_edge] += nodes_bellow[it];
     }
 }
 
-bool splitByEdge(Node n, Edge from, SubTree& subtree)
+void clusterFromTree(Node n, Edge last_edge, SubTree& subtree, vector<Node>& cluster)
 {
-    // From root, count nodes bellow each edge
-    SubTree::EdgeMap<int> nodesBellow(subtree, 1);
+    cluster.push_back(n);
+    for (SubTree::IncEdgeIt it(subtree,n); it != INVALID; ++it)
+    {
+        if (it == last_edge) continue;
+        clusterFromTree(n, it, subtree, cluster);
+    }
+}
 
-    // 
+bool splitByEdge(int tree_size, SubTree& subtree, SubTree::EdgeMap<int>& nodes_bellow)
+{
+
+    for (SubTree::EdgeIt it(subtree); it != INVALID; ++it)
+    {
+        if (nodes_bellow[it] == ceil(tree_size / 2))
+        {
+            // Divide in this edge
+            Node u = subtree.u(it);
+            Node v = subtree.v(it);
+            vector<Node> cluster_u{};
+            vector<Node> cluster_v{};
+            clusterFromTree(u, it, subtree, cluster_u);
+            clusterFromTree(v, it, subtree, cluster_v);
+            clusters.push_back(cluster_u);
+            clusters.push_back(cluster_v);
+            return true;
+        }
+    }
     return false;
 }
 
 bool splitByNode(Node n, Node up, SubTree& subtree)
 {
     return false;
+}
+
+bool splitTree(SubTree& subtree, vector<Node> subproblem_nodes)
+{
+    Node subtree_root = subproblem_nodes[0];
+    // IF CONTAINS AN EVEN NUMBER OF NODES
+    if ((subproblem_nodes.size() % 2) == 0)
+    {
+        // First, count nodes bellow each edge from a root
+        SubTree::EdgeMap<int> nodes_bellow(subtree, 1);
+        countNodesInEdge(subtree_root, INVALID, subtree, nodes_bellow);
+        bool divided = splitByEdge(subproblem_nodes.size(), subtree, nodes_bellow);
+        // If divided, return
+        if (divided)
+        {
+            return true;
+        }
+        // Else, count nodes bellow each node and divide in edge (u,v) where
+        // the sum of u and v = cluster size
+    }
+    // IF CONTAINS AN ODD NUMBER OF NODES
+    // Count in nodes, divide where | #nodes - (cluster size / 2) | is minimal 
+
 }
 
 // Aux function for subproblem requirements
@@ -849,7 +896,7 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
                 current_cluster = nullptr;
 
                 // divideTree(root, INVALID);
-                splitByEdge(subproblem_nodes[0], INVALID, subtree);
+                // splitByEdge(subproblem_nodes[0], INVALID, subtree);
 
                 // printClusters();
                 // cout << "----" << endl;
