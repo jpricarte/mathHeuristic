@@ -331,20 +331,22 @@ bool divideTree(Node n, Node up)
     return true;
 }
 
-void countNodesInEdge(Node u, Node from, SubTree& subtree, SubTree::EdgeMap<int>& nodes_bellow)
+void countNodes(Node u, Node from, SubTree& subtree
+                SubTree::EdgeMap<int>& nodes_from_edge, SubTree::NodeMap<int>& nodes_from_node)
 {
     Edge curr_edge = findEdge(subtree, u, from);
     for (SubTree::IncEdgeIt it(subtree,u); it != INVALID; ++it)
     {
         Node v = subtree.oppositeNode(u, it);
         if (v == from) continue;
-        countNodesInEdge(v, u, subtree, nodes_bellow);
+        countNodes(v, u, subtree, nodes_from_edge, nodes_from_node);
+        nodes_from_node[u] += nodes_from_node[v];
         if (curr_edge == INVALID) continue;
-        nodes_bellow[curr_edge] += nodes_bellow[it];
+        nodes_from_edge[curr_edge] += nodes_from_edge[it];
     }
 }
 
-void clusterFromTree(Node n, Edge last_edge, SubTree& subtree, vector<Node>& cluster)
+void clusterFromTreeByEdge(Node n, Edge last_edge, SubTree& subtree, vector<Node>& cluster)
 {
     cluster.push_back(n);
     for (SubTree::IncEdgeIt it(subtree,n); it != INVALID; ++it)
@@ -354,18 +356,48 @@ void clusterFromTree(Node n, Edge last_edge, SubTree& subtree, vector<Node>& clu
     }
 }
 
-bool splitByEdge(int tree_size, SubTree& subtree, SubTree::EdgeMap<int>& nodes_bellow)
+void clusterFromTreeByNode(Node n, Node last_node, SubTree& subtree, vector<Node>& cluster)
 {
+    cluster.push_back(n);
+    for (SubTree::IncEdgeIt it(subtree,n); it != INVALID; ++it)
+    {
+        Node v = subtree.oppositeNode(n, it);
+        if (v == last_node) continue;
+        clusterFromTree(n, it, subtree, cluster);
+    }
+}
 
+// Split tree in two if contains a perfect centroid (tree_size/2)
+bool splitInCentroid(int tree_size, SubTree& subtree, SubTree::EdgeMap<int>& nodes_from_edge)
+{
+    // Iterate over edges to find a edge centroid
     for (SubTree::EdgeIt it(subtree); it != INVALID; ++it)
     {
-        if (nodes_bellow[it] == ceil(tree_size / 2))
+        if (nodes_from_edge[it] == ceil(tree_size / 2))
         {
             // Divide in this edge
             Node u = subtree.u(it);
             Node v = subtree.v(it);
             vector<Node> cluster_u{};
             vector<Node> cluster_v{};
+            clusterFromTreeByEdge(u, it, subtree, cluster_u);
+            clusterFromTreeByEdge(v, it, subtree, cluster_v);
+            clusters.push_back(cluster_u);
+            clusters.push_back(cluster_v);
+            return true;
+        }
+    }
+    // Iterate over nodes to find a node centroid
+    // TODO: Redo this step to find a real centroid
+    for (SubTree::NodeIt it(subtree); it != INVALID; ++it)
+    {
+        if (nodes_from_node[it] == ceil(tree_size / 2))
+        {
+            // Divide in this edge
+            Node u it;
+            Node v = subtree.v(it);
+            vector<Node> cluster_u{it};
+            vector<Node> cluster_v{it};
             clusterFromTree(u, it, subtree, cluster_u);
             clusterFromTree(v, it, subtree, cluster_v);
             clusters.push_back(cluster_u);
@@ -373,7 +405,26 @@ bool splitByEdge(int tree_size, SubTree& subtree, SubTree::EdgeMap<int>& nodes_b
             return true;
         }
     }
+    // If not found any centroid, return false
     return false;
+}
+
+// Split tree using an approximation
+void KnapsackChoice(SubTree& subtree, vector<Node> subproblem_nodes, SubTree::NodeMap<int>& nodes_from_node)
+{
+    int root_size = subproblem_nodes.size()+1;
+    Node root = subproblem_nodes[0];
+    // First, find the approximated centroid
+    for (auto node : subproblem_nodes)
+    {
+        int node_size = nodes_from_node[node];
+        if (node_size > ceil(subproblem_nodes.size()/2) && node_size < root_size)
+        {
+            root_size = node_size;
+            root = node;
+        }
+    }
+    // Second step, find sun(s) who not violate 
 }
 
 bool splitByNode(Node n, Node up, SubTree& subtree)
@@ -385,22 +436,17 @@ bool splitTree(SubTree& subtree, vector<Node> subproblem_nodes)
 {
     Node subtree_root = subproblem_nodes[0];
     // IF CONTAINS AN EVEN NUMBER OF NODES
-    if ((subproblem_nodes.size() % 2) == 0)
+    // First, count nodes bellow each edge from a root
+    SubTree::EdgeMap<int> nodes_from_edge(subtree, 1);
+    SubTree::NodeMap<int> nodes_from_node(subtree, 1);
+    countNodesInEdge(subtree_root, INVALID, subtree, nodes_from_edge, nodes_from_node);
+    bool divided = splitInCentroid(subproblem_nodes.size(), subtree, nodes_from_edge);
+    // If divided, return
+    if (divided)
     {
-        // First, count nodes bellow each edge from a root
-        SubTree::EdgeMap<int> nodes_bellow(subtree, 1);
-        countNodesInEdge(subtree_root, INVALID, subtree, nodes_bellow);
-        bool divided = splitByEdge(subproblem_nodes.size(), subtree, nodes_bellow);
-        // If divided, return
-        if (divided)
-        {
-            return true;
-        }
-        // Else, count nodes bellow each node and divide in edge (u,v) where
-        // the sum of u and v = cluster size
+        return true;
     }
-    // IF CONTAINS AN ODD NUMBER OF NODES
-    // Count in nodes, divide where | #nodes - (cluster size / 2) | is minimal 
+    // Else, divide using knapsack problem
 
 }
 
