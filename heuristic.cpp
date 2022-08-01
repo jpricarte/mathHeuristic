@@ -485,7 +485,7 @@ void splitTree(SubTree& subtree, vector<Node>& subproblem_nodes, int i, int j)
     bool divided = splitInEdge(subproblem_nodes.size(), subtree, nodes_from_edge, i, j);
     if (divided)
     {
-        // if (debug)
+        if (debug)
             cout << "divided in edge" << endl;
         return;
     }
@@ -494,14 +494,14 @@ void splitTree(SubTree& subtree, vector<Node>& subproblem_nodes, int i, int j)
     divided = splitInNode(centroid, subtree, i, j);
     if (divided)
     {
-        // if (debug)
+        if (debug)
             cout << "divided in centroid" << endl;
         return;
     }
 
     // If nothing works, use a knapsack approach
     knapsackApproach(centroid, subtree, nodes_from_edge, subproblem_nodes.size(), i, j);
-    // if (debug)
+    if (debug)
         cout << "divided using knapsack approach" << endl;
 
 }
@@ -1276,7 +1276,7 @@ int main(int argc, char* argv[])
                 cout << endl;
             }
         }
-    cout << modified_clusters.size() << endl;
+    // cout << modified_clusters.size() << endl;
 
     }
 
