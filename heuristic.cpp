@@ -7,7 +7,10 @@
 #include <tuple>
 #include <random>
 #include <algorithm>
+
 #include <gurobi_c++.h>
+
+#include <lemon/dfs.h>
 #include <lemon/list_graph.h>
 #include <lemon/dijkstra.h>
 #include <lemon/adaptors.h>
@@ -331,16 +334,37 @@ bool divideTree(Node n, Node up)
     return true;
 }
 
-void countNodes(Node u, Node from, SubTree& subtree
-                SubTree::EdgeMap<int>& nodes_from_edge, SubTree::NodeMap<int>& nodes_from_node)
+Node findCentroidOfTree(Node n, SubTree& subtree, vector<Node> subproblem_nodes)
+{
+    Node min_node = n;
+    int min_dist = INT32_MAX;
+    for (auto u : subproblem_nodes)
+    {
+        int distance = 0;
+        Dfs<SubTree> dfs(subtree);
+        dfs.run(u);
+        for (auto v : subproblem_nodes)
+        {
+            distance += dfs.dist(v);
+        }
+        if (distance <= min_dist)
+        {
+            min_dist = distance;
+            min_node = u;
+        }
+    }
+    return min_node;
+}
+
+void countNodesFromEdge(Node u, Node from, SubTree& subtree,
+                SubTree::EdgeMap<int>& nodes_from_edge)
 {
     Edge curr_edge = findEdge(subtree, u, from);
     for (SubTree::IncEdgeIt it(subtree,u); it != INVALID; ++it)
     {
         Node v = subtree.oppositeNode(u, it);
         if (v == from) continue;
-        countNodes(v, u, subtree, nodes_from_edge, nodes_from_node);
-        nodes_from_node[u] += nodes_from_node[v];
+        countNodesFromEdge(v, u, subtree, nodes_from_edge);
         if (curr_edge == INVALID) continue;
         nodes_from_edge[curr_edge] += nodes_from_edge[it];
     }
@@ -352,23 +376,13 @@ void clusterFromTreeByEdge(Node n, Edge last_edge, SubTree& subtree, vector<Node
     for (SubTree::IncEdgeIt it(subtree,n); it != INVALID; ++it)
     {
         if (it == last_edge) continue;
-        clusterFromTree(n, it, subtree, cluster);
-    }
-}
-
-void clusterFromTreeByNode(Node n, Node last_node, SubTree& subtree, vector<Node>& cluster)
-{
-    cluster.push_back(n);
-    for (SubTree::IncEdgeIt it(subtree,n); it != INVALID; ++it)
-    {
-        Node v = subtree.oppositeNode(n, it);
-        if (v == last_node) continue;
-        clusterFromTree(n, it, subtree, cluster);
+        Node u = subtree.oppositeNode(n,it);
+        clusterFromTreeByEdge(u, it, subtree, cluster);
     }
 }
 
 // Split tree in two if contains a perfect centroid (tree_size/2)
-bool splitInCentroid(int tree_size, SubTree& subtree, SubTree::EdgeMap<int>& nodes_from_edge)
+bool splitInEdge(int tree_size, SubTree& subtree, SubTree::EdgeMap<int>& nodes_from_edge, int i, int j)
 {
     // Iterate over edges to find a edge centroid
     for (SubTree::EdgeIt it(subtree); it != INVALID; ++it)
@@ -382,71 +396,113 @@ bool splitInCentroid(int tree_size, SubTree& subtree, SubTree::EdgeMap<int>& nod
             vector<Node> cluster_v{};
             clusterFromTreeByEdge(u, it, subtree, cluster_u);
             clusterFromTreeByEdge(v, it, subtree, cluster_v);
-            clusters.push_back(cluster_u);
-            clusters.push_back(cluster_v);
+            clusters[i] = cluster_u;
+            clusters[j] = cluster_v;
             return true;
         }
     }
-    // Iterate over nodes to find a node centroid
-    // TODO: Redo this step to find a real centroid
-    for (SubTree::NodeIt it(subtree); it != INVALID; ++it)
+    return false;
+}
+
+bool splitInNode(Node centroid, SubTree& subtree, int i, int j)
+{
+    // If contains more than 2 children, cannot use this approach
+    int count=0;
+    for (SubTree::IncEdgeIt it(subtree,centroid); it != INVALID; ++it)
+        count++;
+    if (count != 2) return false;
+    // Iterate over edges to find a edge centroid
+    vector<vector<Node>> new_clusters = {};
+    for (SubTree::IncEdgeIt it(subtree, centroid); it != INVALID; ++it)
     {
-        if (nodes_from_node[it] == ceil(tree_size / 2))
-        {
             // Divide in this edge
-            Node u it;
-            Node v = subtree.v(it);
-            vector<Node> cluster_u{it};
-            vector<Node> cluster_v{it};
-            clusterFromTree(u, it, subtree, cluster_u);
-            clusterFromTree(v, it, subtree, cluster_v);
-            clusters.push_back(cluster_u);
-            clusters.push_back(cluster_v);
-            return true;
-        }
+            Node u = subtree.oppositeNode(centroid, it);
+            vector<Node> cluster{centroid};
+            clusterFromTreeByEdge(u, it, subtree, cluster);
+            new_clusters.push_back(cluster);
     }
-    // If not found any centroid, return false
-    return false;
+    clusters[i] = new_clusters[i];
+    clusters[j] = new_clusters[j];
+    return true;
 }
 
-// Split tree using an approximation
-void KnapsackChoice(SubTree& subtree, vector<Node> subproblem_nodes, SubTree::NodeMap<int>& nodes_from_node)
+
+void knapsackApproach(Node centroid, SubTree& subtree, SubTree::EdgeMap<int>& nodes_from_edge, int tree_size, int i, int j)
 {
-    int root_size = subproblem_nodes.size()+1;
-    Node root = subproblem_nodes[0];
-    // First, find the approximated centroid
-    for (auto node : subproblem_nodes)
+    GRBModel model_kp {GRBModel(env)};
+    vector<GRBVar> vars;
+    GRBLinExpr objective_expr(0);
+    GRBLinExpr constraint_expr(0);
+
+    for (SubTree::IncEdgeIt it(subtree,centroid); it != INVALID; ++it)
     {
-        int node_size = nodes_from_node[node];
-        if (node_size > ceil(subproblem_nodes.size()/2) && node_size < root_size)
-        {
-            root_size = node_size;
-            root = node;
-        }
+        auto x = model_kp.addVar(0,1,0,GRB_BINARY);
+        vars.push_back(x);
+        objective_expr += x;
+        constraint_expr += (nodes_from_edge[it] * x);
     }
-    // Second step, find sun(s) who not violate 
+
+    model_kp.addConstr(constraint_expr, GRB_LESS_EQUAL, ceil(tree_size / 2));
+    model_kp.setObjective(objective_expr, GRB_MAXIMIZE);
+    model_kp.optimize();
+    int status = model_kp.get(GRB_IntAttr_Status);
+    if( status == GRB_OPTIMAL)
+    {
+        int k=0;
+        vector<Node> cluster_one{centroid};
+        vector<Node> cluster_two{centroid};
+        for (SubTree::IncEdgeIt it(subtree,centroid); it != INVALID; ++it)
+        {
+            Node u = subtree.oppositeNode(centroid, it);
+            if (u == INVALID) continue;
+
+            if (vars[k].get(GRB_DoubleAttr_X))
+            {
+                // Add all nodes bellow edge in a cluster
+                clusterFromTreeByEdge(u, it, subtree, cluster_one);
+            }
+            else 
+            {
+                clusterFromTreeByEdge(u, it, subtree, cluster_two);
+            }
+            k++;
+        }
+        clusters[i] = cluster_one;
+        clusters[j] = cluster_two;
+    }
 }
 
-bool splitByNode(Node n, Node up, SubTree& subtree)
+void splitTree(SubTree& subtree, vector<Node>& subproblem_nodes, int i, int j)
 {
-    return false;
-}
-
-bool splitTree(SubTree& subtree, vector<Node> subproblem_nodes)
-{
-    Node subtree_root = subproblem_nodes[0];
-    // IF CONTAINS AN EVEN NUMBER OF NODES
-    // First, count nodes bellow each edge from a root
+    // first of all, find a centroid
+    Node centroid = findCentroidOfTree(subproblem_nodes[0], subtree, subproblem_nodes);
+    
+    // After, count nodes hanged in each edge
     SubTree::EdgeMap<int> nodes_from_edge(subtree, 1);
-    SubTree::NodeMap<int> nodes_from_node(subtree, 1);
-    countNodesInEdge(subtree_root, INVALID, subtree, nodes_from_edge, nodes_from_node);
-    bool divided = splitInCentroid(subproblem_nodes.size(), subtree, nodes_from_edge);
-    // If divided, return
+    countNodesFromEdge(centroid, INVALID, subtree, nodes_from_edge);
+    
+    // After that, try to split the tree in an edge, cause it's simple
+    bool divided = splitInEdge(subproblem_nodes.size(), subtree, nodes_from_edge, i, j);
     if (divided)
     {
-        return true;
+        // if (debug)
+            cout << "divided in edge" << endl;
+        return;
     }
-    // Else, divide using knapsack problem
+
+    // Also, try to split in Node
+    divided = splitInNode(centroid, subtree, i, j);
+    if (divided)
+    {
+        // if (debug)
+            cout << "divided in centroid" << endl;
+        return;
+    }
+
+    // If nothing works, use a knapsack approach
+    knapsackApproach(centroid, subtree, nodes_from_edge, subproblem_nodes.size(), i, j);
+    // if (debug)
+        cout << "divided using knapsack approach" << endl;
 
 }
 
@@ -847,7 +903,7 @@ void sixth_constraint(GRBModel& model, const vector<Node>& subproblem_nodes,
     model.addConstr(cicle_constr_linexp, GRB_EQUAL, (subproblem_nodes.size()-1));
 }
 
-double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
+double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified, int i, int j)
 {
     // Cria nova tabela de requisitos copiando os valores originais
     auto subproblem_requirements {generateSubproblemsReq(subproblem_nodes)};
@@ -936,11 +992,17 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
                 for (auto n : subproblem_nodes)
                 {
                     in_subtree[n] = true;
-                    in_some_cluster[n] = false;
+                    // in_some_cluster[n] = false;
                 }
                 SubTree subtree(tree, in_subtree);
                 current_cluster = nullptr;
-
+                auto before = clusters.size();
+                splitTree(subtree, subproblem_nodes, i, j);
+                auto after = clusters.size();
+                if (before != after)
+                {
+                    cout << "oh fuck. from " << before << " to " << after << endl;
+                }
                 // divideTree(root, INVALID);
                 // splitByEdge(subproblem_nodes[0], INVALID, subtree);
 
@@ -953,10 +1015,11 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified)
             {
                 if (debug)
                 {
-                    cout << "no optimized" << endl;
-                    cout << "Subproblem result: " << solver_result;
-                    cout << "; Original result: " << init_value << endl;
+                    cout << "no optimized" << endl
+                    << "Subproblem result: " << solver_result 
+                    << "; Original result: " << init_value << endl;
                 }
+                return 0;
             }
         }
         else {
@@ -1115,17 +1178,15 @@ int main(int argc, char* argv[])
     {
         for (int j = i+1; j < clusters.size(); j++)
         {
-            printClusters();
-            cout << "---------" << endl;
             auto some_cluster = selectTwoClusters(i, j);
             if (some_cluster.empty())
                 continue;
             iterNum++;
+
             bool was_modified = false;
-            clusters.erase(clusters.begin() + i);
-            clusters.erase(clusters.begin() + j);
+
             // return the diference between the original value and the new solution
-            auto diff = solveSubproblem(some_cluster, &was_modified); 
+            auto diff = solveSubproblem(some_cluster, &was_modified, i, j); 
 
             auto new_objective = objective + diff;
             if (new_objective < objective)
@@ -1159,7 +1220,6 @@ int main(int argc, char* argv[])
         } 
     }
 
-
     // After run in every cluster at least once,
     // iterate until clusters dosen't modify anymore or until
     // the iteration limit is reached
@@ -1180,23 +1240,32 @@ int main(int argc, char* argv[])
             if (some_cluster.empty())
                 continue;
             iterNum++;
+
             bool was_modified = false;
+
             // return the diference between the original value and the new solution
-            auto diff = solveSubproblem(some_cluster, &was_modified); 
+            auto diff = solveSubproblem(some_cluster, &was_modified, i, j); 
+
             auto new_objective = objective + diff;
             if (new_objective < objective)
             {
                 if (debug)
                     cout << "melhorou" << endl;
                 objective = new_objective;
-            }  
+            }
+
             if (was_modified)
             {
+                if (find(modified_clusters.begin(), modified_clusters.end(), i) == modified_clusters.end())
+                {
+                    modified_clusters.push_back(i);
+                }
                 if (find(modified_clusters.begin(), modified_clusters.end(), j) == modified_clusters.end())
                 {
                     modified_clusters.push_back(j);
                 }
             }
+
 
             if (debug)
             {
@@ -1207,6 +1276,8 @@ int main(int argc, char* argv[])
                 cout << endl;
             }
         }
+    cout << modified_clusters.size() << endl;
+
     }
 
     auto stop = chrono::high_resolution_clock::now();
