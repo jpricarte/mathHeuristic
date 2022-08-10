@@ -119,6 +119,17 @@ void printEdgesTree()
     }
 }
 
+void printEdgesSubTree(SubTree t)
+{
+    for (SubTree::EdgeIt edge(t); edge != INVALID; ++edge)
+    {
+        if (edges_tree[edge])
+        {
+            cout << graph.id(graph.u(edge)) << " " << graph.id(graph.v(edge)) << endl;
+        }
+    }
+}
+
 // Print node clusters for debug
 void printClusters()
 {
@@ -224,11 +235,9 @@ double calculateObjective()
     return cost/2;
 }
 
-// Calculate the objective based on the real requirement, not the approximation
 double calculateSubproblemObjective(vector<Node> subproblem_nodes,
                                     vector<vector<double>> subproblem_requirements)
 {
-
     TreeNodeMapBool subtreeNodes(tree, false);
     for (auto node : subproblem_nodes)
     {
@@ -236,6 +245,7 @@ double calculateSubproblemObjective(vector<Node> subproblem_nodes,
     }
 
     SubTree subtree(tree, subtreeNodes);
+    // printEdgesSubTree(subtree);
     SubTree::EdgeMap<double> subproblem_lengths(subtree);
     for (auto u : subproblem_nodes)
     {
@@ -255,8 +265,6 @@ double calculateSubproblemObjective(vector<Node> subproblem_nodes,
         Dijkstra<SubTree, SubTree::EdgeMap<double>> dij(subtree, subproblem_lengths);
         dij.init();
         dij.addSource(u);
-        // Avoiding processing the u-u edge
-        dij.processNextNode();
         while (!dij.emptyQueue())
         {
             Node v = dij.processNextNode();
@@ -442,7 +450,7 @@ void knapsackApproach(Node centroid, SubTree& subtree, SubTree::EdgeMap<int>& no
         constraint_expr += (nodes_from_edge[it] * x);
     }
 
-    model_kp.addConstr(constraint_expr, GRB_LESS_EQUAL, ceil(tree_size / 2));
+    model_kp.addConstr(constraint_expr, GRB_LESS_EQUAL, (ceil(tree_size / 2)+1));
     model_kp.setObjective(objective_expr, GRB_MAXIMIZE);
     model_kp.optimize();
     int status = model_kp.get(GRB_IntAttr_Status);
@@ -469,6 +477,13 @@ void knapsackApproach(Node centroid, SubTree& subtree, SubTree::EdgeMap<int>& no
         }
         clusters[i] = cluster_one;
         clusters[j] = cluster_two;
+        // cout << "new1 = " << cluster_one.size() << "; new2 = " << cluster_two.size() << endl;
+        // if (abs(((int)cluster_one.size()) - ((int)cluster_two.size())) > 2 )
+        // {
+        //     cout << "centroid: " << graph.id(centroid) << "; cluster lengths: " << ceil(tree_size/2) << endl;
+        //     printEdgesSubTree(subtree);
+        // }
+        // cout << "==========" << endl;
     }
 }
 
@@ -491,7 +506,7 @@ void splitTree(SubTree& subtree, vector<Node>& subproblem_nodes, int i, int j)
     }
 
     // Also, try to split in Node
-    divided = splitInNode(centroid, subtree, i, j);
+    // divided = splitInNode(centroid, subtree, i, j);
     if (divided)
     {
         if (debug)
@@ -501,8 +516,11 @@ void splitTree(SubTree& subtree, vector<Node>& subproblem_nodes, int i, int j)
 
     // If nothing works, use a knapsack approach
     knapsackApproach(centroid, subtree, nodes_from_edge, subproblem_nodes.size(), i, j);
-    if (debug)
-        cout << "divided using knapsack approach" << endl;
+    // if (debug)
+        // cout << "{ ";
+        // for (auto n : subproblem_nodes)
+        //     cout << graph.id(n) << " ";
+        // cout << "}" << endl << "divided using knapsack approach" << endl;
 
 }
 
@@ -625,7 +643,7 @@ void initVars(GRBModel& model, const vector<Node>& subproblem_nodes,
                 stringstream s;
                 s << "x(" << u_id << "," << v_id << ")";
                 auto x = model.addVar(0,1,0,GRB_BINARY, s.str());
-                x.set(GRB_DoubleAttr_Start, 1.0);
+                // x.set(GRB_DoubleAttr_Start, 1.0);
                 x_map.emplace(node_pair, x);
             }
         }
@@ -951,13 +969,15 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified, int i,
         if( status == GRB_OPTIMAL)
         {
             auto solver_result = model.get(GRB_DoubleAttr_ObjVal);
+            auto calcted_value = calculateSubproblemObjective(subproblem_nodes, subproblem_requirements);
+
             if (!verifyTree())
             {
                 if (debug)
                     perror("new solution not valid!\n");
                 return 0;
             }
-            if ((solver_result < init_value)) // Update tree only if we got a better solution
+            if (((int)solver_result) < ((int) init_value)) // Update tree only if we got a better solution
             {
                 if (debug)
                 {
@@ -985,29 +1005,23 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified, int i,
 
                 tree = Tree(graph, edges_tree);
                 TreeNodeMapBool in_subtree(tree, false);
-                // while (!clusters.empty())
-                // {
-                //     clusters.pop_back();
-                // }
+
                 for (auto n : subproblem_nodes)
                 {
                     in_subtree[n] = true;
-                    // in_some_cluster[n] = false;
                 }
                 SubTree subtree(tree, in_subtree);
-                current_cluster = nullptr;
-                auto before = clusters.size();
+                // printEdgesSubTree(subtree);
                 splitTree(subtree, subproblem_nodes, i, j);
-                auto after = clusters.size();
-                if (before != after)
-                {
-                    cout << "oh fuck. from " << before << " to " << after << endl;
-                }
-                // divideTree(root, INVALID);
-                // splitByEdge(subproblem_nodes[0], INVALID, subtree);
 
-                // printClusters();
-                // cout << "----" << endl;
+                // if (solver_result != calcted_value)
+                // {
+                    cout << "initial: " << init_value << endl;
+                    cout << "c1 = " << i << "; c2 = " << j << endl;
+                    cout << "solver: " << solver_result << "\tcalculated: " << calcted_value << endl;
+                    printClusters();
+                    cout << "--------------" << endl;
+                // }
 
                 return solver_result - init_value;
             }
@@ -1276,13 +1290,14 @@ int main(int argc, char* argv[])
                 cout << endl;
             }
         }
-    // cout << modified_clusters.size() << endl;
 
     }
 
     auto stop = chrono::high_resolution_clock::now();
     auto exec_time = chrono::duration_cast<chrono::seconds>(stop - start);
     auto value = calculateObjective();
+    printClusters();
+    printEdgesTree();
     cout << "calculado: " << value << endl;
     cout << "atualizado: " << objective << endl;
     auto name_index = filename.find_last_of("/");
