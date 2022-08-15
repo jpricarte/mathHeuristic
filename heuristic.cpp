@@ -32,7 +32,7 @@ typedef tuple<int, int> uv;
 typedef tuple<int, int, int> ouv;
 
 const bool debug = false;
-auto seed = 0xcafe;
+auto seed = 0xabeceda10;
 
 // Defining Graph elements
 Graph graph;
@@ -269,7 +269,7 @@ double calculateSubproblemObjective(vector<Node> subproblem_nodes,
         {
             Node v = dij.processNextNode();
             if (u == v) continue;
-            // cout << graph.id(u) << " " << graph.id(v) << endl;
+            cout << graph.id(u) << " " << graph.id(v) << endl;
             double distance = dij.dist(v);
             int u_index = find(subproblem_nodes.begin(), subproblem_nodes.end(), u) 
                         - subproblem_nodes.begin();
@@ -516,11 +516,8 @@ void splitTree(SubTree& subtree, vector<Node>& subproblem_nodes, int i, int j)
 
     // If nothing works, use a knapsack approach
     knapsackApproach(centroid, subtree, nodes_from_edge, subproblem_nodes.size(), i, j);
-    // if (debug)
-        // cout << "{ ";
-        // for (auto n : subproblem_nodes)
-        //     cout << graph.id(n) << " ";
-        // cout << "}" << endl << "divided using knapsack approach" << endl;
+    if (debug)
+        cout << "divided using knapsack approach" << endl;
 
 }
 
@@ -969,7 +966,6 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified, int i,
         if( status == GRB_OPTIMAL)
         {
             auto solver_result = model.get(GRB_DoubleAttr_ObjVal);
-            auto calcted_value = calculateSubproblemObjective(subproblem_nodes, subproblem_requirements);
 
             if (!verifyTree())
             {
@@ -1011,6 +1007,7 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified, int i,
                     in_subtree[n] = true;
                 }
                 SubTree subtree(tree, in_subtree);
+                auto calcted_value = 1;// calculateSubproblemObjective(subproblem_nodes, subproblem_requirements);
                 // printEdgesSubTree(subtree);
                 splitTree(subtree, subproblem_nodes, i, j);
 
@@ -1020,7 +1017,8 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified, int i,
                     cout << "c1 = " << i << "; c2 = " << j << endl;
                     cout << "solver: " << solver_result << "\tcalculated: " << calcted_value << endl;
                     printClusters();
-                    cout << "--------------" << endl;
+                    // printEdgesTree();
+                    cout << "----------------------------------------------------------" << endl;
                 // }
 
                 return solver_result - init_value;
