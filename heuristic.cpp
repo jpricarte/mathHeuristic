@@ -262,6 +262,7 @@ double calculateSubproblemObjective(vector<Node> subproblem_nodes,
     double cost = 0;
     for (auto u : subproblem_nodes)
     {
+        // Uses dijkstra because it calculate the distances in algorithm
         Dijkstra<SubTree, SubTree::EdgeMap<double>> dij(subtree, subproblem_lengths);
         dij.init();
         dij.addSource(u);
@@ -269,8 +270,9 @@ double calculateSubproblemObjective(vector<Node> subproblem_nodes,
         {
             Node v = dij.processNextNode();
             if (u == v) continue;
-            cout << graph.id(u) << " " << graph.id(v) << endl;
+            // cout << graph.id(u) << " " << graph.id(v) << endl;
             double distance = dij.dist(v);
+            // Get a and v index in sunproblem_nodes vector, who is the same index of subproblem requirements
             int u_index = find(subproblem_nodes.begin(), subproblem_nodes.end(), u) 
                         - subproblem_nodes.begin();
             int v_index = find(subproblem_nodes.begin(), subproblem_nodes.end(), v)
@@ -527,7 +529,7 @@ void splitTree(SubTree& subtree, vector<Node>& subproblem_nodes, int i, int j)
 a árvore que será adicionada
     current: vértice que está sendo analizado nesse momento
     previous: último vértice analisado, apenas para evitar volta
-    outros: vetores comuns
+    outros: vetores de vertice e requerimentos do subproblema
 */
 void addRequirements(int base_index, Node current , Node previous,
                      vector<Node> subproblem_nodes,
@@ -535,14 +537,16 @@ void addRequirements(int base_index, Node current , Node previous,
 {
     auto current_id = graph.id(current);
 
-    // Para cada vértice da árvore
+    // Para cada vértice da sub árvore
     for (auto i=0; i < (int) subproblem_nodes.size(); i++)
     {
         // Inicialmente, o requerimento entre o vértice da árvore que será sobrecarregado (base_index)
         // e os outros vértices receberá uma soma do requerimento do novo vértice (current)
         auto node_id = graph.id(subproblem_nodes[i]);
+        if (i == base_index) continue;
         if (i > base_index)
         {
+            // Soma ao valor base os requerimentos pendurados
             (*subproblem_requirements)[base_index][i] += requirements[node_id][current_id];
         }
         else
@@ -564,8 +568,13 @@ void addRequirements(int base_index, Node current , Node previous,
     }
 }
 
+/*
+    generateSubproblemsReq: Create a vector of requirements where:
+        - subproblem_req[u][v]: the sum of requirements of v and all nodes hanging in u (include u itselfs, of course)
+*/
 vector<vector<double>> generateSubproblemsReq(const vector<Node>& subproblem_nodes)
 {
+    // Initialize subproblem requirements with: (f.all u,v in subproblem_nodes) subproblem_req[u][v] = req[u][v]
     vector<vector<double>> subproblem_requirements = {};
     for (auto i=0; i < (int) subproblem_nodes.size(); i++)
     {
@@ -587,6 +596,8 @@ vector<vector<double>> generateSubproblemsReq(const vector<Node>& subproblem_nod
         }
     }
 
+    // Sum the requirements of hanged nodes recursively
+    // For each u in subproblem_nodes, add to it requirements (all of them) the sum of hanged nodes
     for (auto i=0; i < (int) subproblem_nodes.size(); i++)
     {
         // Para cada vértice u
@@ -595,7 +606,7 @@ vector<vector<double>> generateSubproblemsReq(const vector<Node>& subproblem_nod
         for (auto e = Tree::IncEdgeIt(tree,u); e != INVALID; ++e)
         {
             auto v = tree.oppositeNode(u, e);
-            // se o vertice oposto não estiver no subproblema,
+            // se o vertice oposto não estiver recursivly no subproblema,
             // vai somando todos os requisitos dos vértices agregados para ele
             if (find(subproblem_nodes.begin(), subproblem_nodes.end(), v) == subproblem_nodes.end())
             {
@@ -1007,7 +1018,8 @@ double solveSubproblem(vector<Node> subproblem_nodes, bool* was_modified, int i,
                     in_subtree[n] = true;
                 }
                 SubTree subtree(tree, in_subtree);
-                auto calcted_value = 1;// calculateSubproblemObjective(subproblem_nodes, subproblem_requirements);
+                // auto calcted_value = 1;// 
+                auto calcted_value = calculateSubproblemObjective(subproblem_nodes, subproblem_requirements);
                 // printEdgesSubTree(subtree);
                 splitTree(subtree, subproblem_nodes, i, j);
 
