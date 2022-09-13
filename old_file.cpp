@@ -1150,7 +1150,7 @@ int main(int argc, char* argv[])
         cout << endl;
     if (argc != 4)
     {
-        perror("usage: ./heuristic inputFile clusterSize maxIter mode \n");
+        perror("usage: ./heuristic inputFile clusterSize maxIter \n");
         return 1;
     }
 
