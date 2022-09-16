@@ -126,7 +126,7 @@ double calculateObjective(Instance& instance, Solution* solution)
 
 double calculateSubproblemObjective(std::vector<Node> subproblem_nodes,
                                     std::vector<std::vector<double>> subproblem_requirements,
-                                    Instance& instance, Solution* solution)
+                                    Instance& instance, Solution* solution, bool needPrint=false)
 {
     TreeNodeMapBool subtreeNodes(*solution->tree, false);
     for (auto node : subproblem_nodes)
@@ -135,6 +135,7 @@ double calculateSubproblemObjective(std::vector<Node> subproblem_nodes,
     }
 
     SubTree subtree(*solution->tree, subtreeNodes);
+    if (needPrint) printEdgesSubTree(subtree, instance, solution);
     // printEdgesSubTree(subtree);
     SubTree::EdgeMap<double> subproblem_lengths(subtree);
     for (auto u : subproblem_nodes)
@@ -169,6 +170,7 @@ double calculateSubproblemObjective(std::vector<Node> subproblem_nodes,
             cost += distance * requirement;
         }
     }
+
     return cost;
 }
 
@@ -183,17 +185,45 @@ void initVars(GRBModel& model, const std::vector<Node>& subproblem_nodes,
             auto v = subproblem_nodes[j];
             auto e = findEdge(instance.graph, u, v);
             if (e != lemon::INVALID) {
-                // edges_tree[e] = false;
                 int u_id = Graph::id(u);
                 int v_id = Graph::id(v);
                 // x_{o,u} (x for every edge (o,u) in subgraph)
                 uv node_pair(u_id, v_id);
                 pair_keys.push_back(node_pair);
                 std::stringstream s;
-                s << "x(" << u_id << "," << v_id << ")";
+                s << u_id << " " << v_id;
                 auto x = model.addVar(0, 1, 0, GRB_BINARY, s.str());
                 // x.set(GRB_DoubleAttr_Start, 1.0);
                 x_map.emplace(node_pair, x);
+            }
+        }
+    }
+
+    for (auto o : subproblem_nodes) {
+        for (int i=0; i < (int) subproblem_nodes.size(); i++)
+        {
+            auto u = subproblem_nodes[i];
+            for (int j=0; j < (int) subproblem_nodes.size(); j++)
+            {
+                auto v = subproblem_nodes[j];
+                int o_id = instance.graph.id(o);
+                int u_id = instance.graph.id(u);
+                int v_id = instance.graph.id(v);
+                // By definition, we cannot have a (u,u) edge, so we don't need to test it
+                if (findEdge(instance.graph, u, v) != lemon::INVALID)
+                {
+                    // f^o_{u,v} for every arc in graph (u,v) != (v,u)
+                    ouv node_triple(o_id, u_id, v_id);
+                    triple_keys.push_back(node_triple);
+                    std::stringstream s;
+                    s << "f(" << o_id << "," << u_id << "," << v_id << ")";
+                    auto f = model.addVar(0, GRB_INFINITY, 0, GRB_CONTINUOUS, s.str());
+                    f_map.emplace(node_triple, f);
+                    std::stringstream s2;
+                    s2 << "y(" << o_id << "," << u_id << "," << v_id << ")";
+                    auto y = model.addVar(0,1,0,GRB_BINARY, s2.str());
+                    y_map.emplace(node_triple, y);
+                }
             }
         }
     }
@@ -441,7 +471,7 @@ void sixth_constraint(GRBModel& model, const std::vector<Node>& subproblem_nodes
 }
 
 
-Node findCentroidOfTree(Node n, SubTree& subtree, std::vector<Node> subproblem_nodes)
+Node findCentroidOfTree(Node n, SubTree& subtree, const std::vector<Node>& subproblem_nodes)
 {
     Node min_node = n;
     int min_dist = INT32_MAX;
@@ -614,11 +644,12 @@ double solveSubproblem(std::vector<Node> subproblem_nodes, bool* was_modified, i
 
         std::vector<uv> pair_keys {};
         std::map<uv, GRBVar> x_map;
-
         // f_{o,u,v} means: the flow of o going from u to v
         std::vector<ouv> triple_keys {};
         std::map<ouv, GRBVar> f_map;
         std::map<ouv, GRBVar> y_map;
+
+        LinearProgram lp{model, pair_keys, x_map, triple_keys, f_map, y_map};
 
         initVars(model, subproblem_nodes, pair_keys, triple_keys, x_map, f_map, y_map, instance);
 
@@ -690,19 +721,25 @@ double solveSubproblem(std::vector<Node> subproblem_nodes, bool* was_modified, i
                     in_subtree[n] = true;
                 }
                 SubTree subtree(*solution->tree, in_subtree);
-                auto calcted_value = 1;// calculateSubproblemObjective(subproblem_nodes, subproblem_requirements);
+                auto calcted_value = calculateSubproblemObjective(subproblem_nodes, subproblem_requirements,
+                                                                  instance, solution);
                 // printEdgesSubTree(subtree);
                 splitTree(subtree, subproblem_nodes, i, j, instance, solution, env);
 
-                // if (solver_result != calcted_value)
-                // {
-                std::cout << "initial: " << init_value << std::endl;
-                std::cout << "c1 = " << i << "; c2 = " << j << std::endl;
-                std::cout << "solver: " << solver_result << "\tcalculated: " << calcted_value << std::endl;
-                printClusters(solution);
-                // printEdgesTree();
-                std::cout << "----------------------------------------------------------" << std::endl;
-                // }
+                if (solver_result != calcted_value)
+                {
+                    std::cout << "initial: " << init_value << std::endl;
+                    std::cout << "c1 = " << i << "; c2 = " << j << std::endl;
+                    std::cout << "solver: " << solver_result << std::endl;
+                    for (const auto& key : pair_keys) {
+                        if ((bool) x_map[key].get(GRB_DoubleAttr_X))
+                            std::cout << x_map[key].get(GRB_StringAttr_VarName) << std::endl;
+                    }
+                    std::cout << "\tcalculated: " << calcted_value << std::endl;
+                    printEdgesSubTree(subtree, instance, solution);
+
+                    std::cout << "----------------------------------------------------------" << std::endl;
+                }
 
                 return solver_result - init_value;
             }

@@ -10,11 +10,15 @@ GRBEnv env(false);
 void readInstance(const string& filename, Instance& instance);
 
 int main (int argc, char* argv[]) {
+
     if (argc != 4)
     {
         perror("usage: ./heuristic inputFile clusterSize maxIter \n");
         return 1;
     }
+    env.set("OutputFlag", "0");
+    env.start();
+
     string input_file = argv[1];
     int cluster_size = stoi(argv[2]);
     int max_iteration = stoi(argv[3]);

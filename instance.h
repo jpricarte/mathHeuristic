@@ -72,4 +72,16 @@ public:
     }
 };
 
+struct LinearProgram {
+    GRBModel model;
+
+    std::vector<uv> pair_keys;
+    std::map<uv, GRBVar> x_map;
+
+    // f_{o,u,v} means: the flow of o going from u to v
+    std::vector<ouv> triple_keys;
+    std::map<ouv, GRBVar> f_map;
+    std::map<ouv, GRBVar> y_map;
+};
+
 #endif //MATH_HEURISTIC_INSTANCE_H

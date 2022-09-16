@@ -19,6 +19,18 @@ void printEdgesTree(const Instance& instance, const Solution* solution)
     }
 }
 
+void printEdgesSubTree(SubTree t, const Instance& instance, const Solution* solution)
+{
+    for (SubTree::EdgeIt edge(t); edge != lemon::INVALID; ++edge)
+    {
+        if (solution->edge_in_tree->operator[](edge))
+        {
+            std::cout << Graph::id(instance.graph.u(edge))
+            << " " << Graph::id(instance.graph.v(edge)) << std::endl;
+        }
+    }
+}
+
 bool containsCycle(const Node n, const Node up, TreeNodeMapBool& visited, const Solution* solution)
 {
     bool has_cycle = false;
