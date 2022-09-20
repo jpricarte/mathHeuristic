@@ -142,7 +142,7 @@ double calculateSubproblemObjective(std::vector<Node> subproblem_nodes,
     {
         for (auto v : subproblem_nodes)
         {
-            auto e = findEdge(*solution->tree, u, v);
+            auto e = findEdge(subtree, u, v);
             if (e != lemon::INVALID)
             {
                 subproblem_lengths[e] = instance.lengths[e];
@@ -160,7 +160,6 @@ double calculateSubproblemObjective(std::vector<Node> subproblem_nodes,
         {
             Node v = dij.processNextNode();
             if (u == v) continue;
-//            std::cout << Graph::id(u) << " " << Graph::id(v) << std::endl;
             double distance = dij.dist(v);
             int u_index = find(subproblem_nodes.begin(), subproblem_nodes.end(), u)
                           - subproblem_nodes.begin();
@@ -726,17 +725,22 @@ double solveSubproblem(std::vector<Node> subproblem_nodes, bool* was_modified, i
                 // printEdgesSubTree(subtree);
                 splitTree(subtree, subproblem_nodes, i, j, instance, solution, env);
 
-                if (solver_result != calcted_value)
+                if (((int) solver_result ) != ((int) calcted_value))
                 {
                     std::cout << "initial: " << init_value << std::endl;
                     std::cout << "c1 = " << i << "; c2 = " << j << std::endl;
                     std::cout << "solver: " << solver_result << std::endl;
-                    for (const auto& key : pair_keys) {
-                        if ((bool) x_map[key].get(GRB_DoubleAttr_X))
-                            std::cout << x_map[key].get(GRB_StringAttr_VarName) << std::endl;
-                    }
-                    std::cout << "\tcalculated: " << calcted_value << std::endl;
-                    printEdgesSubTree(subtree, instance, solution);
+                    std::cout << "calculated: " << calcted_value << std::endl;
+
+//                    for (auto i=0; i<subproblem_nodes.size(); i++) {
+//                        auto u = subproblem_nodes[i];
+//                        for (auto j=i; j<subproblem_nodes.size(); j++) {
+//                            auto v = subproblem_nodes[j];
+//                            std::cout << Graph::id(u) << " " << Graph::id(v) << " "
+//                            << subproblem_requirements[i][j] << " "
+//                            << instance.requirements[Graph::id(u)][Graph::id(v)] << std::endl;
+//                        }
+//                    }
 
                     std::cout << "----------------------------------------------------------" << std::endl;
                 }
