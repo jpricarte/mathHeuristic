@@ -98,8 +98,9 @@ std::vector<Node> selectTwoClusters(Solution* solution, int first, int second)
         for (auto node_two : solution->clusters[second])
         {
             // If clusters are connected, create a merged cluster
-            if (node_one == node_two || findEdge(*solution->tree, node_one, node_two) != lemon::INVALID)
+            if (findEdge(*solution->tree, node_one, node_two) != lemon::INVALID)
             {
+                std::cout << "connected by: " << Graph::id(node_one) << " and " << Graph::id(node_two) << std::endl;
                 for (auto node : solution->clusters[first])
                 {
                     final_cluster.push_back(node);
@@ -212,6 +213,60 @@ std::vector<std::vector<double>> generateSubproblemsReq(const std::vector<Node>&
     }
 
     return subproblem_requirements;
+}
+
+void readInstance(const std::string& filename, Instance& instance)
+{
+    // Stream and temporary vars
+    std::ifstream instanceFile(filename);
+    if (!instanceFile.is_open())
+    {
+        std::cerr << "file not open" << std::endl;
+        return;
+    }
+    std::string e1, e2, e3;
+    unsigned int u, v;
+    double value;
+    // Get graph size (n for nodes and m for edges) and resizing everything
+    instanceFile >> e1 >> e2;
+    instance.n = stoi(e1);
+    instance.m = stoi(e2);
+    instance.graph.reserveNode(instance.n);
+    instance.nodes.resize(instance.n);
+    instance.requirements.resize(instance.n, std::vector<double>(instance.n));
+    instance.graph.reserveEdge(instance.m);
+    instance.edges.resize(instance.m);
+
+    // Adding nodes
+    for (auto i=0; i<instance.n; i++)
+    {
+        instance.nodes[i] = instance.graph.addNode();
+    }
+
+    // Adding edges and length
+    for (auto i=0; i<instance.m; i++)
+    {
+        instanceFile >> e1 >> e2 >> e3;
+        u = stoi(e1);
+        v = stoi(e2);
+        value = stod(e3);
+        instance.edges[i] = instance.graph.addEdge(instance.nodes[u], instance.nodes[v]);
+        instance.lengths[instance.edges[i]] = value;
+    }
+    // Adding requirements
+    for (auto i=0; i<instance.n; i++)
+    {
+        instance.requirements[i][i] = 0;
+        for (auto j=i+1; j<instance.n; j++)
+        {
+            instanceFile >> e1;
+            value = stod(e1);
+            instance.requirements[i][j] = value;
+            instance.requirements[j][i] = value;
+        }
+    }
+    instanceFile.close();
+
 }
 
 #endif //MATH_HEURISTIC_AUXILIAR_H

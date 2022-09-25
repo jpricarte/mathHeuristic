@@ -138,10 +138,12 @@ double calculateSubproblemObjective(std::vector<Node> subproblem_nodes,
     if (needPrint) printEdgesSubTree(subtree, instance, solution);
     // printEdgesSubTree(subtree);
     SubTree::EdgeMap<double> subproblem_lengths(subtree);
-    for (auto u : subproblem_nodes)
+    for (int i = 0; i < subproblem_nodes.size(); i++)
     {
-        for (auto v : subproblem_nodes)
+        auto u = subproblem_nodes[i];
+        for (int j = i; j <  subproblem_nodes.size();  j++)
         {
+            auto v = subproblem_nodes[j];
             auto e = findEdge(subtree, u, v);
             if (e != lemon::INVALID)
             {
@@ -161,9 +163,9 @@ double calculateSubproblemObjective(std::vector<Node> subproblem_nodes,
             Node v = dij.processNextNode();
             if (u == v) continue;
             double distance = dij.dist(v);
-            int u_index = find(subproblem_nodes.begin(), subproblem_nodes.end(), u)
+            auto u_index = find(subproblem_nodes.begin(), subproblem_nodes.end(), u)
                           - subproblem_nodes.begin();
-            int v_index = find(subproblem_nodes.begin(), subproblem_nodes.end(), v)
+            auto v_index = find(subproblem_nodes.begin(), subproblem_nodes.end(), v)
                           - subproblem_nodes.begin();
             double requirement = subproblem_requirements[u_index][v_index];
             cost += distance * requirement;
@@ -725,8 +727,6 @@ double solveSubproblem(std::vector<Node> subproblem_nodes, bool* was_modified, i
                 // printEdgesSubTree(subtree);
                 splitTree(subtree, subproblem_nodes, i, j, instance, solution, env);
 
-                if (((int) solver_result ) != ((int) calcted_value))
-                {
                     std::cout << "initial: " << init_value << std::endl;
                     std::cout << "c1 = " << i << "; c2 = " << j << std::endl;
                     std::cout << "solver: " << solver_result << std::endl;
@@ -743,7 +743,7 @@ double solveSubproblem(std::vector<Node> subproblem_nodes, bool* was_modified, i
 //                    }
 
                     std::cout << "----------------------------------------------------------" << std::endl;
-                }
+
 
                 return solver_result - init_value;
             }
