@@ -62,7 +62,11 @@ int main (int argc, char* argv[]) {
                 continue;
             iterNum++;
             bool was_modified = false;
-            auto diff = solveSubproblem(some_cluster, &was_modified, i, j, instance, solution, env);
+            auto solver_result = solveSubproblem(some_cluster, &was_modified, i, j, instance, solution, env);
+            if (solver_result == -1) {
+                cout << "ERROR: " << input_file << ", " << cluster_size << endl;
+                return -1;
+            }
             if (was_modified)
             {
                 if (find(modified_clusters.begin(), modified_clusters.end(), i) == modified_clusters.end())
@@ -91,21 +95,20 @@ int main (int argc, char* argv[]) {
             bool was_modified = false;
 
             // return the diference between the original value and the new solution
-            auto diff = solveSubproblem(some_cluster, &was_modified, i, j, instance, solution, env);
-
-
-            auto new_objective = objective + diff;
-            if (new_objective < objective)
-
-
-                if (was_modified) {
-                    if (find(modified_clusters.begin(), modified_clusters.end(), i) == modified_clusters.end()) {
-                        modified_clusters.push_back(i);
-                    }
-                    if (find(modified_clusters.begin(), modified_clusters.end(), j) == modified_clusters.end()) {
-                        modified_clusters.push_back(j);
-                    }
+            auto solver_result = solveSubproblem(some_cluster, &was_modified, i, j, instance, solution, env);
+            if (solver_result == -1) {
+                cout << "ERROR: " << endl
+                     << input_file << ", " << cluster_size << endl;
+                return -1;
+            }
+            if (was_modified) {
+                if (find(modified_clusters.begin(), modified_clusters.end(), i) == modified_clusters.end()) {
+                    modified_clusters.push_back(i);
                 }
+                if (find(modified_clusters.begin(), modified_clusters.end(), j) == modified_clusters.end()) {
+                    modified_clusters.push_back(j);
+                }
+            }
         }
     }
 

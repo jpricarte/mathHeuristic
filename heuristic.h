@@ -686,10 +686,9 @@ double solveSubproblem(std::vector<Node> subproblem_nodes, bool* was_modified, i
             {
                 if (debug)
                     perror("new solution not valid!\n");
-                return 0;
+                return -1;
             }
-            if (((int)solver_result) < ((int) init_value)) // Update tree only if we got a better solution
-            {
+
                 if (debug)
                 {
                     std::cout << "optimized!" << std::endl;
@@ -722,41 +721,9 @@ double solveSubproblem(std::vector<Node> subproblem_nodes, bool* was_modified, i
                     in_subtree[n] = true;
                 }
                 SubTree subtree(*solution->tree, in_subtree);
-                auto calcted_value = calculateSubproblemObjective(subproblem_nodes, subproblem_requirements,
-                                                                  instance, solution);
-                // printEdgesSubTree(subtree);
                 splitTree(subtree, subproblem_nodes, i, j, instance, solution, env);
 
-                    std::cout << "initial: " << init_value << std::endl;
-                    std::cout << "c1 = " << i << "; c2 = " << j << std::endl;
-                    std::cout << "solver: " << solver_result << std::endl;
-                    std::cout << "calculated: " << calcted_value << std::endl;
-
-//                    for (auto i=0; i<subproblem_nodes.size(); i++) {
-//                        auto u = subproblem_nodes[i];
-//                        for (auto j=i; j<subproblem_nodes.size(); j++) {
-//                            auto v = subproblem_nodes[j];
-//                            std::cout << Graph::id(u) << " " << Graph::id(v) << " "
-//                            << subproblem_requirements[i][j] << " "
-//                            << instance.requirements[Graph::id(u)][Graph::id(v)] << std::endl;
-//                        }
-//                    }
-
-                    std::cout << "----------------------------------------------------------" << std::endl;
-
-
-                return solver_result - init_value;
-            }
-            else
-            {
-                if (debug)
-                {
-                    std::cout << "no optimized" << std::endl
-                         << "Subproblem result: " << solver_result
-                         << "; Original result: " << init_value << std::endl;
-                }
-                return 0;
-            }
+                return solver_result;
         }
         else {
             if (debug)
